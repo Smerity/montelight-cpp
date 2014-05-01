@@ -5,5 +5,5 @@ Montelight
 
 To compile, using either `g++` or `clang++`:
 
-    g++ -std=c++0x montelight.cc -o montelight
-    clang++ -std=c++0x montelight.cc -o montelight
+    g++ -fopenmp -O3 -std=c++0x montelight.cc -o montelight
+    clang++ -fopenmp -O3 -std=c++0x montelight.cc -o montelight
