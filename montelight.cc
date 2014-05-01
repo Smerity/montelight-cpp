@@ -2,9 +2,11 @@
 // Tegan Brennan, Stephen Merity, Taiyo Wilson
 #include <cmath>
 #include <string>
+#include <iostream>
 #include <fstream>
+#include <vector>
 
-#define EPSILON 0.01f
+#define EPSILON 0.1f
 
 using namespace std;
 
@@ -19,6 +21,9 @@ struct Vector {
   inline Vector operator-(const Vector &o) const {
     return Vector(x - o.x, y - o.y, z - o.z);
   }
+  inline Vector operator*(const Vector &o) const {
+    return Vector(x * o.x, y * o.y, z * o.z);
+  }
   inline Vector operator*(double o) const {
     return Vector(x * o, y * o, z * o);
   }
@@ -30,6 +35,9 @@ struct Vector {
   }
   inline Vector cross(Vector &o){
     return Vector(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x);
+  }
+  inline double max() {
+    return fmax(x, fmax(y, z));
   }
 };
 
@@ -66,18 +74,19 @@ struct Image {
 };
 
 struct Shape {
-  Vector color;
+  Vector color, emit;
   //
-  Shape(const Vector color_) : color(color_) {}
+  Shape(const Vector color_, const Vector emit_) : color(color_), emit(emit_) {}
   virtual double intersects(const Ray &r) const { return 0; }
+  virtual Vector randomPoint() const { return Vector(); }
 };
 
 struct Sphere : Shape {
-  Vector center, color;
+  Vector center;
   double radius;
   //
-  Sphere(const Vector center_, double radius_, const Vector color_) :
-    Shape(color_), center(center_), radius(radius_) {}
+  Sphere(const Vector center_, double radius_, const Vector color_, const Vector emit_) :
+    Shape(color_, emit_), center(center_), radius(radius_) {}
   double intersects(const Ray &r) const {
     // Find if, and at what distance, the ray intersects with this object
     // Equation follows from solving quadratic equation of (r - c) ^ 2
@@ -97,13 +106,57 @@ struct Sphere : Shape {
     disc = sqrt(disc);
     double t = - b - disc;
     if (t > EPSILON) {
-      return t;
+      return t / 2;
     }
     t = - b + disc;
     if (t > EPSILON) {
-      return t;
+      return t / 2;
     }
     return 0;
+  }
+  Vector randomPoint() const {
+    return center;
+  }
+};
+
+struct Tracer {
+  std::vector<Shape *> scene;
+  //
+  Tracer(const std::vector<Shape *> &scene_) : scene(scene_) {}
+  std::pair<Shape *, double> getIntersection(const Ray &r) const {
+    Shape *hitObj = NULL;
+    double closest = 1e20f;
+    for (Shape *obj : scene) {
+      double distToHit = obj->intersects(r);
+      if (distToHit > 0 && distToHit < closest) {
+        hitObj = obj;
+        closest = distToHit;
+      }
+    }
+    return std::make_pair(hitObj, closest);
+  }
+  Vector getRadiance(const Ray &r, int depth) {
+    // Work out what (if anything) was hit
+    auto result = getIntersection(r);
+    if (!result.first) {
+      return Vector();
+    }
+    Vector hit = r.origin + r.direction * result.second;
+    // Work out the color
+    Vector color;
+    for (Shape *light : scene) {
+      // Skip any objects that don't emit light
+      if (light->emit.max() == 0) {
+        continue;
+      }
+      Vector lightDirection = (light->randomPoint() - hit).norm();
+      Ray rayToLight = Ray(hit, lightDirection);
+      auto lightHit = getIntersection(rayToLight);
+      if (light == lightHit.first) {
+        color = light->emit * result.first->color;
+      }
+    }
+    return result.first->emit + color;
   }
 };
 
@@ -113,17 +166,19 @@ int main(int argc, const char *argv[]) {
   Image img(w, h);
   // Set up the scene
   // Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
-  Shape *scene[] = {//Scene: radius, position, emission, color, material
-    new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25)),//Left
-    new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75)),//Rght
-    new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75)),//Back
-    new Sphere(Vector(50,40.8,-1e5+170), 1e5f, Vector()),//Frnt
-    new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75)),//Botm
-    new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75)),//Top
-    new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.9),//Mirr
-    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9),//Glas
-    new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1)) //Light
+  std::vector<Shape *> scene = {//Scene: radius, position, emission, color, material
+    new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()),//Left
+    new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()),//Rght
+    new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()),//Back
+    new Sphere(Vector(50,40.8,-1e5+170), 1e5f, Vector(), Vector()),//Frnt
+    new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Botm
+    new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Top
+    new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Mirr
+    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9, Vector(0.4, 0.4, 0.4)),//Glas
+    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1)) //Light
+    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(1,1,1)) //Light
   };
+  Tracer tracer = Tracer(scene);
   // Set up the camera
   Ray camera = Ray(Vector(50, 52, 295.6), Vector(0, -0.042612, -1).norm());
   // Upright camera with field of view angle set by 0.5135
@@ -138,16 +193,7 @@ int main(int argc, const char *argv[]) {
         // Calculate the direction of the camera ray
         Vector d = (cx * ((x / float(w)) - 0.5)) + (cy * ((y / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
-        // Check for intersection with objects in scene
-        Vector color;
-        double closest = 1e20f;
-        for (auto obj : scene) {
-          double hit = obj->intersects(ray);
-          if (hit > 0 && hit < closest) {
-            color = obj->color;
-            closest = hit;
-          }
-        }
+        Vector color = tracer.getRadiance(ray, 0);
         // Add result of sample to image
         img.setPixel(x, y, color);
       }
