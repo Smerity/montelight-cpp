@@ -6,7 +6,7 @@
 #include <fstream>
 #include <vector>
 
-#define EPSILON 0.1f
+#define EPSILON 0.001f
 
 using namespace std;
 
@@ -24,6 +24,10 @@ struct Vector {
   inline Vector operator*(const Vector &o) const {
     return Vector(x * o.x, y * o.y, z * o.z);
   }
+  inline Vector operator/(double o) const {
+    return Vector(x / o, y / o, z / o);
+  }
+
   inline Vector operator*(double o) const {
     return Vector(x * o, y * o, z * o);
   }
@@ -49,12 +53,16 @@ struct Ray {
 struct Image {
   unsigned int width, height;
   Vector *pixels;
+  unsigned int *samples;
   //
   Image(unsigned int w, unsigned int h) : width(w), height(h) {
     pixels = new Vector[width * height];
+    samples = new unsigned int[width * height];
   }
   void setPixel(unsigned int x, unsigned int y, const Vector &v) {
-    pixels[(height - y) * width + x] = v;
+    unsigned int index = (height - y) * width + x;
+    pixels[index] = pixels[index] + v;
+    samples[index] += 1;
   }
   void save(std::string filePrefix) {
     std::string filename = filePrefix + ".ppm";
@@ -64,12 +72,14 @@ struct Image {
     f << "P3 " << width << " " << height << " " << 255 << std::endl;
     // For each pixel, write the space separated RGB values
     for (int i=0; i < width * height; i++) {
-      unsigned int r = pixels[i].x * 255, g = pixels[i].y * 255, b = pixels[i].z * 255;
+      auto p = pixels[i] / samples[i];
+      unsigned int r = fmin(255, p.x * 255), g = fmin(255, p.y * 255), b = fmin(255, p.z * 255);
       f << r << " " << g << " " << b << std::endl;
     }
   }
   ~Image() {
     delete[] pixels;
+    delete[] samples;
   }
 };
 
@@ -79,6 +89,7 @@ struct Shape {
   Shape(const Vector color_, const Vector emit_) : color(color_), emit(emit_) {}
   virtual double intersects(const Ray &r) const { return 0; }
   virtual Vector randomPoint() const { return Vector(); }
+  virtual Vector getNormal(const Vector &p) const { return Vector(); }
 };
 
 struct Sphere : Shape {
@@ -117,6 +128,10 @@ struct Sphere : Shape {
   Vector randomPoint() const {
     return center;
   }
+  Vector getNormal(const Vector &p) const {
+    // Normalize the normal by using radius instead of a sqrt call
+    return (p - center) / radius;
+  }
 };
 
 struct Tracer {
@@ -138,25 +153,43 @@ struct Tracer {
   Vector getRadiance(const Ray &r, int depth) {
     // Work out what (if anything) was hit
     auto result = getIntersection(r);
-    if (!result.first) {
+    Shape *hitObj = result.first;
+    if (!hitObj || depth > 4) {
       return Vector();
     }
-    Vector hit = r.origin + r.direction * result.second;
-    // Work out the color
-    Vector color;
+    Vector hitPos = r.origin + r.direction * result.second;
+    // Work out the contribution from directly sampling the emitters
+    Vector lightSampling;
+    /*
     for (Shape *light : scene) {
       // Skip any objects that don't emit light
       if (light->emit.max() == 0) {
         continue;
       }
-      Vector lightDirection = (light->randomPoint() - hit).norm();
-      Ray rayToLight = Ray(hit, lightDirection);
+      Vector lightDirection = (light->randomPoint() - hitPos).norm();
+      Ray rayToLight = Ray(hitPos, lightDirection);
       auto lightHit = getIntersection(rayToLight);
       if (light == lightHit.first) {
-        color = light->emit * result.first->color;
+        lightSampling = light->emit * hitObj->color;
       }
     }
-    return result.first->emit + color;
+    */
+    // Work out contribution from reflected light
+    Vector norm = hitObj->getNormal(hitPos);
+    // Orient the normal according to how the ray struck the object
+    if (norm.dot(r.direction) > 0) {
+      norm = norm * -1;
+    }
+    // TODO: Clean up this section
+    double r1 = 2 * M_PI * drand48();
+    double r2 = drand48();
+    double r2s = sqrt(r2);
+    Vector u = (fabs(norm.x)>.1 ? Vector(0, 1) : Vector(1)).cross(norm).norm();
+    Vector v = norm.cross(u);
+    Vector d = (u * cos(r1) * r2s + v * sin(r1) * r2s + norm * sqrt(1-r2)).norm();
+    Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
+    //
+    return hitObj->emit + lightSampling + hitObj->color * reflected;
   }
 };
 
@@ -174,9 +207,9 @@ int main(int argc, const char *argv[]) {
     new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Botm
     new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Top
     new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Mirr
-    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9, Vector(0.4, 0.4, 0.4)),//Glas
-    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1)) //Light
-    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(1,1,1)) //Light
+    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Glas
+    new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
+    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(0.7,0.7,0.7)) //Light
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
@@ -186,8 +219,11 @@ int main(int argc, const char *argv[]) {
   // Cross product gets the vector perpendicular to cx and the "gaze" direction
   Vector cy = (cx.cross(camera.direction)).norm() * 0.5135;
   // Take a set number of samples per pixel
-  for (int samples = 0; samples < 1; ++samples) {
+  unsigned int SAMPLES = 1000;
+  for (int sample = 0; sample < SAMPLES; ++sample) {
+    std::cout << "Taking sample " << sample << "\r" << std::flush;
     // For each pixel, sample a ray in that direction
+    #pragma omp parallel for schedule(dynamic, 1)
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
         // Calculate the direction of the camera ray
