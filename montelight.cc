@@ -27,7 +27,6 @@ struct Vector {
   inline Vector operator/(double o) const {
     return Vector(x / o, y / o, z / o);
   }
-
   inline Vector operator*(double o) const {
     return Vector(x * o, y * o, z * o);
   }
@@ -60,7 +59,7 @@ struct Image {
     samples = new unsigned int[width * height];
   }
   void setPixel(unsigned int x, unsigned int y, const Vector &v) {
-    unsigned int index = (height - y) * width + x;
+    unsigned int index = (height - y - 1) * width + x;
     pixels[index] = pixels[index] + v;
     samples[index] += 1;
   }
@@ -186,7 +185,7 @@ struct Tracer {
     double r2s = sqrt(r2);
     Vector u = (fabs(norm.x)>.1 ? Vector(0, 1) : Vector(1)).cross(norm).norm();
     Vector v = norm.cross(u);
-    Vector d = (u * cos(r1) * r2s + v * sin(r1) * r2s + norm * sqrt(1-r2)).norm();
+    Vector d = (u * cos(r1) * r2s + v * sin(r1) * r2s + norm * sqrt(1 - r2)).norm();
     Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
     //
     return hitObj->emit + lightSampling + hitObj->color * reflected;
@@ -195,7 +194,7 @@ struct Tracer {
 
 int main(int argc, const char *argv[]) {
   // Initialize the image
-  int w = 256, h = 256;
+  int w = 512, h = 512;
   Image img(w, h);
   // Set up the scene
   // Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
@@ -209,7 +208,7 @@ int main(int argc, const char *argv[]) {
     new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Mirr
     new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Glas
     new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
-    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(0.7,0.7,0.7)) //Light
+    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(12,12,12)) //Light
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
@@ -219,7 +218,7 @@ int main(int argc, const char *argv[]) {
   // Cross product gets the vector perpendicular to cx and the "gaze" direction
   Vector cy = (cx.cross(camera.direction)).norm() * 0.5135;
   // Take a set number of samples per pixel
-  unsigned int SAMPLES = 1000;
+  unsigned int SAMPLES = 100;
   for (int sample = 0; sample < SAMPLES; ++sample) {
     std::cout << "Taking sample " << sample << "\r" << std::flush;
     // For each pixel, sample a ray in that direction
