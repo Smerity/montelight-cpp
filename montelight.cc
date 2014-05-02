@@ -18,6 +18,10 @@ struct Vector {
   inline Vector operator+(const Vector &o) const {
     return Vector(x + o.x, y + o.y, z + o.z);
   }
+  inline Vector &operator+=(const Vector &rhs) {
+    x += rhs.x; y += rhs.y; z += rhs.z;
+    return *this;
+  }
   inline Vector operator-(const Vector &o) const {
     return Vector(x - o.x, y - o.y, z - o.z);
   }
@@ -27,7 +31,6 @@ struct Vector {
   inline Vector operator/(double o) const {
     return Vector(x / o, y / o, z / o);
   }
-
   inline Vector operator*(double o) const {
     return Vector(x * o, y * o, z * o);
   }
@@ -39,6 +42,9 @@ struct Vector {
   }
   inline Vector cross(Vector &o){
     return Vector(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x);
+  }
+  inline double min() {
+    return fmin(x, fmin(y, z));
   }
   inline double max() {
     return fmax(x, fmax(y, z));
@@ -61,8 +67,16 @@ struct Image {
   }
   void setPixel(unsigned int x, unsigned int y, const Vector &v) {
     unsigned int index = (height - y - 1) * width + x;
-    pixels[index] = pixels[index] + v;
+    pixels[index] += v;
     samples[index] += 1;
+  }
+  inline double clamp(double x) {
+    if (x < 0) return 0;
+    if (x > 1) return 1;
+    return x;
+  }
+  inline double toInt(double x) {
+    return pow(clamp(x), 1 / 2.2f) * 255;
   }
   void save(std::string filePrefix) {
     std::string filename = filePrefix + ".ppm";
@@ -73,7 +87,7 @@ struct Image {
     // For each pixel, write the space separated RGB values
     for (int i=0; i < width * height; i++) {
       auto p = pixels[i] / samples[i];
-      unsigned int r = fmin(255, p.x * 255), g = fmin(255, p.y * 255), b = fmin(255, p.z * 255);
+      unsigned int r = fmin(255, toInt(p.x)), g = fmin(255, toInt(p.y)), b = fmin(255, toInt(p.z));
       f << r << " " << g << " " << b << std::endl;
     }
   }
@@ -153,44 +167,48 @@ struct Tracer {
     return std::make_pair(hitObj, closest);
   }
   Vector getRadiance(const Ray &r, int depth) {
+    bool _EMITTER_SAMPLING = true;
     // Work out what (if anything) was hit
     auto result = getIntersection(r);
     Shape *hitObj = result.first;
     // Russian Roulette sampling based on reflectance of material
     double U = drand48();
-    if (depth > 4 && (depth > 200 || U > hitObj->color.max())) {
+    if (depth > 4 && (depth > 20 || U > hitObj->color.max())) {
       return Vector();
     }
     Vector hitPos = r.origin + r.direction * result.second;
-    // Work out the contribution from directly sampling the emitters
-    // TODO: Emitter Sampling
-    Vector lightSampling;
-
-    for (Shape *light : scene) {
-      // Skip any objects that don't emit light
-      if (light->emit.max() == 0) {
-        continue;
-      }
-      Vector lightDirection = (light->randomPoint() - hitPos).norm();
-      Ray rayToLight = Ray(hitPos, lightDirection);
-      auto lightHit = getIntersection(rayToLight);
-      // !!!
-      if (light == lightHit.first) {
-        lightSampling = light->emit * 0.2 * hitObj->color;
-      }
-    }
-
-    // Work out contribution from reflected light
     Vector norm = hitObj->getNormal(hitPos);
     // Orient the normal according to how the ray struck the object
     if (norm.dot(r.direction) > 0) {
       norm = norm * -1;
     }
-    
-    // TODO: get direction of reflectance for different materials
-    
+    // Work out the contribution from directly sampling the emitters
+    Vector lightSampling;
+    if (_EMITTER_SAMPLING) {
+      for (Shape *light : scene) {
+        // Skip any objects that don't emit light
+        if (light->emit.max() == 0) {
+          continue;
+        }
+        Vector lightPos = light->randomPoint();
+        Vector lightDirection = (lightPos - hitPos).norm();
+        Ray rayToLight = Ray(hitPos, lightDirection);
+        auto lightHit = getIntersection(rayToLight);
+        if (light == lightHit.first) {
+          double wi = lightDirection.dot(norm);
+          if (wi > 0) {
+            double srad = 1.5;
+            //double srad = 600;
+            double cos_a_max = sqrt(1-srad*srad/(hitPos - lightPos).dot(hitPos - lightPos));
+            double omega = 2*M_PI*(1-cos_a_max);
+            lightSampling += light->emit * wi * omega * M_1_PI;
+          }
+        }
+      }
+    }
+    // Work out contribution from reflected light
     // Diffuse reflection condition:
-    // create orthogonal coordinate system defined by (x=u, y=v, z=norm)
+    // Create orthogonal coordinate system defined by (x=u, y=v, z=norm)
     double angle = 2 * M_PI * drand48();
     double dist_cen = sqrt(drand48());
     Vector u;
@@ -202,22 +220,22 @@ struct Tracer {
     }
     u = u.cross(norm).norm();
     Vector v = norm.cross(u);
-    // direction of reflection
+    // Direction of reflection
     Vector d = (u * cos(angle) * dist_cen + v * sin(angle) * dist_cen + norm * sqrt(1 - dist_cen * dist_cen)).norm();
-    
-    // recurse
+
+    // Recurse
     Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
     //
-    if (depth == 0) {
-    	return hitObj->emit + lightSampling + hitObj->color * reflected;
-		}
-		return lightSampling + hitObj->color * reflected;
+    if (!_EMITTER_SAMPLING || depth == 0) {
+      return hitObj->emit + hitObj->color * lightSampling + hitObj->color * reflected;
+    }
+    return hitObj->color * lightSampling + hitObj->color * reflected;
   }
 };
 
 int main(int argc, const char *argv[]) {
   // Initialize the image
-  int w = 512, h = 512;
+  int w = 256, h = 256;
   Image img(w, h);
   // Set up the scene
   // Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
@@ -228,10 +246,10 @@ int main(int argc, const char *argv[]) {
     new Sphere(Vector(50,40.8,-1e5+170), 1e5f, Vector(), Vector()),//Frnt
     new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Botm
     new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Top
-    new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Mirr
-    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Glas
+    new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Mirr
+    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Glas
     //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
-    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(0.7,0.7,0.7)) //Light
+    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(), Vector(4,4,4) * 100) //Light
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
@@ -248,14 +266,14 @@ int main(int argc, const char *argv[]) {
     #pragma omp parallel for schedule(dynamic, 1)
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
-        // Calculate the direction of the camera ray and jitter pixel randomly in dx and dy        
+        // Calculate the direction of the camera ray and jitter pixel randomly in dx and dy
         double Ux = drand48();
         double Uy = drand48();
         Vector d = (cx * (((x+Ux-0.5) / float(w)) - 0.5)) + (cy * (((y+Uy-0.5) / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
-        Vector color = tracer.getRadiance(ray, 0);
+        Vector rads = tracer.getRadiance(ray, 0);
         // Add result of sample to image
-        img.setPixel(x, y, color);
+        img.setPixel(x, y, rads);
       }
     }
   }
