@@ -27,6 +27,7 @@ struct Vector {
   inline Vector operator/(double o) const {
     return Vector(x / o, y / o, z / o);
   }
+
   inline Vector operator*(double o) const {
     return Vector(x * o, y * o, z * o);
   }
@@ -125,6 +126,8 @@ struct Sphere : Shape {
     return 0;
   }
   Vector randomPoint() const {
+    // TODO: get random point on sphere surface
+    // (try not sampling points that are not visible in the scene)
     return center;
   }
   Vector getNormal(const Vector &p) const {
@@ -153,11 +156,14 @@ struct Tracer {
     // Work out what (if anything) was hit
     auto result = getIntersection(r);
     Shape *hitObj = result.first;
-    if (!hitObj || depth > 4) {
+    // Russian Roulette sampling based on reflectance of material
+    double U = drand48();
+    if (depth > 4 && (depth > 200 || U > hitObj->color.max())) {
       return Vector();
     }
     Vector hitPos = r.origin + r.direction * result.second;
     // Work out the contribution from directly sampling the emitters
+    // TODO: Emitter Sampling
     Vector lightSampling;
     /*
     for (Shape *light : scene) {
@@ -179,13 +185,26 @@ struct Tracer {
     if (norm.dot(r.direction) > 0) {
       norm = norm * -1;
     }
-    // TODO: Clean up this section
-    double r1 = 2 * M_PI * drand48();
-    double r2 = drand48();
-    double r2s = sqrt(r2);
-    Vector u = (fabs(norm.x)>.1 ? Vector(0, 1) : Vector(1)).cross(norm).norm();
+    
+    // TODO: get direction of reflectance for different materials
+    
+    // Diffuse reflection condition:
+    // create orthogonal coordinate system defined by (x=u, y=v, z=norm)
+    double angle = 2 * M_PI * drand48();
+    double dist_cen = sqrt(drand48());
+    Vector u;
+    if (fabs(norm.x) > 0.1) {
+      u = Vector(0, 1, 0);
+    }
+    else {
+      u = Vector(1, 0, 0);
+    }
+    u = u.cross(norm).norm();
     Vector v = norm.cross(u);
-    Vector d = (u * cos(r1) * r2s + v * sin(r1) * r2s + norm * sqrt(1 - r2)).norm();
+    // direction of reflection
+    Vector d = (u * cos(angle) * dist_cen + v * sin(angle) * dist_cen + norm * sqrt(1 - dist_cen * dist_cen)).norm();
+    
+    // recurse
     Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
     //
     return hitObj->emit + lightSampling + hitObj->color * reflected;
@@ -198,7 +217,7 @@ int main(int argc, const char *argv[]) {
   Image img(w, h);
   // Set up the scene
   // Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
-  std::vector<Shape *> scene = {//Scene: radius, position, emission, color, material
+  std::vector<Shape *> scene = {//Scene: position, radius, color, emission; not yet added: material
     new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()),//Left
     new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()),//Rght
     new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()),//Back
@@ -208,7 +227,7 @@ int main(int argc, const char *argv[]) {
     new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Mirr
     new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Glas
     new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
-    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(12,12,12)) //Light
+    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(0.7,0.7,0.7)) //Light
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
