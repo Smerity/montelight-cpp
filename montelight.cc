@@ -49,6 +49,10 @@ struct Vector {
   inline double max() {
     return fmax(x, fmax(y, z));
   }
+  inline Vector &abs() {
+    x = fabs(x); y = fabs(y); z = fabs(z);
+    return *this;
+  }
 };
 
 struct Ray {
@@ -58,17 +62,46 @@ struct Ray {
 
 struct Image {
   unsigned int width, height;
-  Vector *pixels;
+  Vector *pixels, *current;
   unsigned int *samples;
+  std::vector<Vector> *raw_samples;
   //
   Image(unsigned int w, unsigned int h) : width(w), height(h) {
     pixels = new Vector[width * height];
     samples = new unsigned int[width * height];
+    current = new Vector[width * height];
+    //raw_samples = new std::vector<Vector>[width * height];
+  }
+  Vector getPixel(unsigned int x, unsigned int y) {
+    unsigned int index = (height - y - 1) * width + x;
+    return current[index];
   }
   void setPixel(unsigned int x, unsigned int y, const Vector &v) {
     unsigned int index = (height - y - 1) * width + x;
     pixels[index] += v;
     samples[index] += 1;
+    current[index] = pixels[index] / samples[index];
+    //raw_samples[index].push_back(v);
+  }
+  Vector getSurroundingAverage(int x, int y, int pattern=0) {
+    unsigned int index = (height - y - 1) * width + x;
+    Vector avg;
+    int total;
+    for (int dy = -1; dy < 2; ++dy) {
+      for (int dx = -1; dx < 2; ++dx) {
+        if (pattern == 0 && (dx != 0 && dy != 0)) continue;
+        if (pattern == 1 && (dx == 0 || dy == 0)) continue;
+        if (dx == 0 && dy == 0) {
+          continue;
+        }
+        if (x + dx < 0 || x + dx > width - 1) continue;
+        if (y + dy < 0 || y + dy > height - 1) continue;
+        index = (height - (y + dy) - 1) * width + (x + dx);
+        avg += current[index];
+        total += 1;
+      }
+    }
+    return avg / total;
   }
   inline double clamp(double x) {
     if (x < 0) return 0;
@@ -88,6 +121,20 @@ struct Image {
     for (int i=0; i < width * height; i++) {
       auto p = pixels[i] / samples[i];
       unsigned int r = fmin(255, toInt(p.x)), g = fmin(255, toInt(p.y)), b = fmin(255, toInt(p.z));
+      f << r << " " << g << " " << b << std::endl;
+    }
+  }
+  void saveHistogram(std::string filePrefix, int maxIters) {
+    std::string filename = filePrefix + ".ppm";
+    std::ofstream f;
+    f.open(filename.c_str(), std::ofstream::out);
+    // PPM header: P3 => RGB, width, height, and max RGB value
+    f << "P3 " << width << " " << height << " " << 255 << std::endl;
+    // For each pixel, write the space separated RGB values
+    for (int i=0; i < width * height; i++) {
+      auto p = samples[i] / maxIters;
+      unsigned int r, g, b;
+      r= g = b = fmin(255, 255 * p);
       f << r << " " << g << " " << b << std::endl;
     }
   }
@@ -142,6 +189,7 @@ struct Sphere : Shape {
   Vector randomPoint() const {
     // TODO: get random point on sphere surface
     // (try not sampling points that are not visible in the scene)
+    // https://www.jasondavies.com/maps/random-points/
     return center;
   }
   Vector getNormal(const Vector &p) const {
@@ -167,7 +215,7 @@ struct Tracer {
     return std::make_pair(hitObj, closest);
   }
   Vector getRadiance(const Ray &r, int depth) {
-    bool _EMITTER_SAMPLING = true;
+    bool _EMITTER_SAMPLING = false;
     // Work out what (if anything) was hit
     auto result = getIntersection(r);
     Shape *hitObj = result.first;
@@ -214,8 +262,7 @@ struct Tracer {
     Vector u;
     if (fabs(norm.x) > 0.1) {
       u = Vector(0, 1, 0);
-    }
-    else {
+    } else {
       u = Vector(1, 0, 0);
     }
     u = u.cross(norm).norm();
@@ -248,8 +295,8 @@ int main(int argc, const char *argv[]) {
     new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Top
     new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Mirr
     new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Glas
-    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
-    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(), Vector(4,4,4) * 100) //Light
+    new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
+    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(), Vector(4,4,4) * 100) //Light
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
@@ -259,13 +306,24 @@ int main(int argc, const char *argv[]) {
   // Cross product gets the vector perpendicular to cx and the "gaze" direction
   Vector cy = (cx.cross(camera.direction)).norm() * 0.5135;
   // Take a set number of samples per pixel
-  unsigned int SAMPLES = 50;
+  unsigned int SAMPLES = 800;
+  unsigned int updated;
   for (int sample = 0; sample < SAMPLES; ++sample) {
-    std::cout << "Taking sample " << sample << "\r" << std::flush;
+    std::cout << "Taking sample " << sample << ": " << updated << " pixels updated\r" << std::flush;
+    if (sample && sample % 50 == 0) {
+      img.save("temp/render_" + std::to_string(sample));
+      img.saveHistogram("temp/hist" + std::to_string(sample), sample / 2.0);
+    }
+    updated = 0;
     // For each pixel, sample a ray in that direction
-    #pragma omp parallel for schedule(dynamic, 1)
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
+        Vector target = img.getPixel(x, y);
+        double A = (target - img.getSurroundingAverage(x, y, sample % 2)).abs().max() / (100 / 255.0);
+        if (sample > 10 && drand48() > A) {
+          continue;
+        }
+        ++updated;
         // Jitter pixel randomly in dx and dy according to the tent filter
         double Ux = 2 * drand48();
         double Uy = 2 * drand48();
@@ -292,5 +350,6 @@ int main(int argc, const char *argv[]) {
   }
   // Save the resulting raytraced image
   img.save("render");
+  img.saveHistogram("hist", SAMPLES / 2.);
   return 0;
 }
