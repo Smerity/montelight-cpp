@@ -267,8 +267,8 @@ int main(int argc, const char *argv[]) {
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
         // Jitter pixel randomly in dx and dy according to the tent filter
-        double Ux = drand48();
-        double Uy = drand48();
+        double Ux = 2 * drand48();
+        double Uy = 2 * drand48();
         double dx;
         if (Ux < 1) {
           dx = sqrt(Ux) - 1;
@@ -282,7 +282,7 @@ int main(int argc, const char *argv[]) {
           dy = 1 - sqrt(2 - Uy);
         }
         // Calculate the direction of the camera ray
-        Vector d = (cx * (((x+dx-0.5) / float(w)) - 0.5)) + (cy * (((y+dy-0.5) / float(h)) - 0.5)) + camera.direction;
+        Vector d = (cx * (((x+dx) / float(w)) - 0.5)) + (cy * (((y+dy) / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
         Vector rads = tracer.getRadiance(ray, 0);
         // Add result of sample to image
