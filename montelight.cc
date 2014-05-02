@@ -266,10 +266,23 @@ int main(int argc, const char *argv[]) {
     #pragma omp parallel for schedule(dynamic, 1)
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
-        // Calculate the direction of the camera ray and jitter pixel randomly in dx and dy
+        // Jitter pixel randomly in dx and dy according to the tent filter
         double Ux = drand48();
         double Uy = drand48();
-        Vector d = (cx * (((x+Ux-0.5) / float(w)) - 0.5)) + (cy * (((y+Uy-0.5) / float(h)) - 0.5)) + camera.direction;
+        double dx;
+        if (Ux < 1) {
+          dx = sqrt(Ux) - 1;
+        } else {
+          dx = 1 - sqrt(2 - Ux);
+        }
+        double dy;
+        if (Uy < 1) {
+          dy = sqrt(Uy) - 1;
+        } else {
+          dy = 1 - sqrt(2 - Uy);
+        }
+        // Calculate the direction of the camera ray
+        Vector d = (cx * (((x+dx-0.5) / float(w)) - 0.5)) + (cy * (((y+dy-0.5) / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
         Vector rads = tracer.getRadiance(ray, 0);
         // Add result of sample to image
