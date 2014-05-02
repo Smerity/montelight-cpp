@@ -165,7 +165,7 @@ struct Tracer {
     // Work out the contribution from directly sampling the emitters
     // TODO: Emitter Sampling
     Vector lightSampling;
-    /*
+
     for (Shape *light : scene) {
       // Skip any objects that don't emit light
       if (light->emit.max() == 0) {
@@ -174,11 +174,12 @@ struct Tracer {
       Vector lightDirection = (light->randomPoint() - hitPos).norm();
       Ray rayToLight = Ray(hitPos, lightDirection);
       auto lightHit = getIntersection(rayToLight);
+      // !!!
       if (light == lightHit.first) {
-        lightSampling = light->emit * hitObj->color;
+        lightSampling = light->emit * 0.2 * hitObj->color;
       }
     }
-    */
+
     // Work out contribution from reflected light
     Vector norm = hitObj->getNormal(hitPos);
     // Orient the normal according to how the ray struck the object
@@ -207,7 +208,10 @@ struct Tracer {
     // recurse
     Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
     //
-    return hitObj->emit + lightSampling + hitObj->color * reflected;
+    if (depth == 0) {
+    	return hitObj->emit + lightSampling + hitObj->color * reflected;
+		}
+		return lightSampling + hitObj->color * reflected;
   }
 };
 
@@ -226,8 +230,8 @@ int main(int argc, const char *argv[]) {
     new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Top
     new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Mirr
     new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.9, Vector()),//Glas
-    new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
-    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(0.7,0.7,0.7)) //Light
+    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
+    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(1,1,1), Vector(0.7,0.7,0.7)) //Light
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
@@ -237,15 +241,17 @@ int main(int argc, const char *argv[]) {
   // Cross product gets the vector perpendicular to cx and the "gaze" direction
   Vector cy = (cx.cross(camera.direction)).norm() * 0.5135;
   // Take a set number of samples per pixel
-  unsigned int SAMPLES = 100;
+  unsigned int SAMPLES = 50;
   for (int sample = 0; sample < SAMPLES; ++sample) {
     std::cout << "Taking sample " << sample << "\r" << std::flush;
     // For each pixel, sample a ray in that direction
     #pragma omp parallel for schedule(dynamic, 1)
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
-        // Calculate the direction of the camera ray
-        Vector d = (cx * ((x / float(w)) - 0.5)) + (cy * ((y / float(h)) - 0.5)) + camera.direction;
+        // Calculate the direction of the camera ray and jitter pixel randomly in dx and dy        
+        double Ux = drand48();
+        double Uy = drand48();
+        Vector d = (cx * (((x+Ux-0.5) / float(w)) - 0.5)) + (cy * (((y+Uy-0.5) / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
         Vector color = tracer.getRadiance(ray, 0);
         // Add result of sample to image
