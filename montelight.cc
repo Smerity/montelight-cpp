@@ -55,6 +55,16 @@ struct Vector {
     x = fabs(x); y = fabs(y); z = fabs(z);
     return *this;
   }
+  inline Vector &clamp() {
+    // C++11 lambda function: http://en.cppreference.com/w/cpp/language/lambda
+    auto clampDouble = [](double x) {
+      if (x < 0) return 0.0;
+      if (x > 1) return 1.0;
+      return x;
+    };
+    x = clampDouble(x); y = clampDouble(y); z = clampDouble(z);
+    return *this;
+  }
 };
 
 struct Ray {
@@ -105,13 +115,8 @@ struct Image {
     }
     return avg / total;
   }
-  inline double clamp(double x) {
-    if (x < 0) return 0;
-    if (x > 1) return 1;
-    return x;
-  }
   inline double toInt(double x) {
-    return pow(clamp(x), 1 / 2.2f) * 255;
+    return pow(x, 1 / 2.2f) * 255;
   }
   void save(std::string filePrefix) {
     std::string filename = filePrefix + ".ppm";
@@ -349,6 +354,8 @@ int main(int argc, const char *argv[]) {
         Vector d = (cx * (((x+dx) / float(w)) - 0.5)) + (cy * (((y+dy) / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
         Vector rads = tracer.getRadiance(ray, 0);
+        // Clamp the radiance so it is between 0 and 1
+        rads.clamp();
         // Add result of sample to image
         img.setPixel(x, y, rads);
       }
