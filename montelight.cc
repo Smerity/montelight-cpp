@@ -2,8 +2,10 @@
 // Tegan Brennan, Stephen Merity, Taiyo Wilson
 #include <cmath>
 #include <string>
+#include <iomanip>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <vector>
 
 #define EPSILON 0.001f
@@ -215,7 +217,7 @@ struct Tracer {
     return std::make_pair(hitObj, closest);
   }
   Vector getRadiance(const Ray &r, int depth) {
-    bool _EMITTER_SAMPLING = false;
+    bool _EMITTER_SAMPLING = true;
     // Work out what (if anything) was hit
     auto result = getIntersection(r);
     Shape *hitObj = result.first;
@@ -295,8 +297,8 @@ int main(int argc, const char *argv[]) {
     new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Top
     new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Mirr
     new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Glas
-    new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
-    //new Sphere(Vector(50,65.1,81.6), 1.5, Vector(), Vector(4,4,4) * 100) //Light
+    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
+    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(), Vector(4,4,4) * 100) //Light
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
@@ -311,19 +313,23 @@ int main(int argc, const char *argv[]) {
   for (int sample = 0; sample < SAMPLES; ++sample) {
     std::cout << "Taking sample " << sample << ": " << updated << " pixels updated\r" << std::flush;
     if (sample && sample % 50 == 0) {
-      img.save("temp/render_" + std::to_string(sample));
-      img.saveHistogram("temp/hist" + std::to_string(sample), sample / 2.0);
+      std::ostringstream fn;
+      fn << std::setfill('0') << std::setw(5) << sample;
+      img.save("temp/render_" + fn.str());
+      img.saveHistogram("temp/hist_" + fn.str(), sample / 2.0);
     }
     updated = 0;
     // For each pixel, sample a ray in that direction
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
+        /*
         Vector target = img.getPixel(x, y);
         double A = (target - img.getSurroundingAverage(x, y, sample % 2)).abs().max() / (100 / 255.0);
         if (sample > 10 && drand48() > A) {
           continue;
         }
         ++updated;
+        */
         // Jitter pixel randomly in dx and dy according to the tent filter
         double Ux = 2 * drand48();
         double Uy = 2 * drand48();
