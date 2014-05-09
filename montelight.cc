@@ -194,10 +194,17 @@ struct Sphere : Shape {
     return 0;
   }
   Vector randomPoint() const {
-    // TODO: get random point on sphere surface
-    // (try not sampling points that are not visible in the scene)
+    // TODO: Improved methods of random point generation
     // https://www.jasondavies.com/maps/random-points/
-    return center;
+    //
+    // Get random spherical coordinates on light
+    double theta = drand48() * M_PI;
+    double phi = drand48() * 2 * M_PI;
+    // Convert to Cartesian
+    double dxr = radius * sin(theta) * cos(phi);
+    double dyr = radius * sin(theta) * sin(phi);
+    double dzr = radius * cos(theta);
+    return Vector(center.x + dxr, center.y + dyr, center.z + dzr);
   }
   Vector getNormal(const Vector &p) const {
     // Normalize the normal by using radius instead of a sqrt call
