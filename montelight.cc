@@ -301,16 +301,23 @@ int main(int argc, const char *argv[]) {
   // Set up the scene
   // Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
   std::vector<Shape *> scene = {//Scene: position, radius, color, emission; not yet added: material
-    new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()),//Left
-    new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()),//Rght
-    new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()),//Back
-    new Sphere(Vector(50,40.8,-1e5+170), 1e5f, Vector(), Vector()),//Frnt
-    new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Botm
-    new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),//Top
-    new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Mirr
-    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),//Glas
-    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12)) //Light
-    new Sphere(Vector(50,65.1,81.6), 1.5, Vector(), Vector(4,4,4) * 100) //Light
+    // Left sphere
+    new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()),
+    // Right sphere
+    new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()),
+    // Back sphere
+    new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()),
+    // Floor sphere
+    new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),
+    // Roof sphere
+    new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),
+    // Traditional mirror sphere
+    new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+    // Traditional glass sphere
+    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+    // Light source
+    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12))
+    new Sphere(Vector(50,65.1,81.6), 8.5, Vector(), Vector(4,4,4) * 100) // Small = 1.5, Large = 8.5
   };
   Tracer tracer = Tracer(scene);
   // Set up the camera
@@ -324,7 +331,7 @@ int main(int argc, const char *argv[]) {
   unsigned int updated;
   for (int sample = 0; sample < SAMPLES; ++sample) {
     std::cout << "Taking sample " << sample << ": " << updated << " pixels updated\r" << std::flush;
-    if (sample && sample % 50 == 0) {
+    if (sample && sample % 25 == 0) {
       std::ostringstream fn;
       fn << std::setfill('0') << std::setw(5) << sample;
       img.save("temp/render_" + fn.str());
