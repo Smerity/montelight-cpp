@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <!-- <link rel="shortcut icon" href="../../docs-assets/ico/favicon.png"> -->
+
+    <title>Monte Carlo methods for improved rendering</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="//netdna.bootstrapcdn.com/bootswatch/3.0.2/yeti/bootstrap.min.css" rel="stylesheet">
+
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+      <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+    <![endif]-->
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [['$','$'], ['\\(','\\)']],
+          displayMath: [ ['$$','$$'], ["\\[","\\]"] ],
+          processEscapes: true
+        }
+      });
+    </script>
+    <script type="text/javascript"
+      src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+    </script>
+
+    <link rel="stylesheet" href="http://yandex.st/highlightjs/8.0/styles/default.min.css">
+    <script src="http://yandex.st/highlightjs/8.0/highlight.min.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+
+    <style>
+      blockquote p.hero {
+        font-size: 28px;
+        text-align: center;
+      }
+      img.padded {
+        margin: 1em;
+      }
+      img.smooth {
+        border-radius: 0px;
+        box-shadow: 0px 0px 4px rgba(0, 0, 0, 0.4);
+        margin: 1em;
+      }
+    </style>
+  </head>
+
+  <body>
+
+    <a href="https://github.com/Smerity/montelight-cpp">
+      <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png" alt="Fork me on GitHub">
+    </a>
+
+    <div class="container">
+
+      <div>
+        <img src="img/iacs.jpg" class="pull-right" width="350px" />
+        <h2>Monte Carlo methods for improved rendering</h2>
+        <h3 class="text-muted">Code overview</h3>
+      </div>
+
+      <hr />
+
+      <center>
+      <div class="btn-toolbar" role="toolbar">
+        <a href="index.html" type="button" class="btn btn-default btn-lg"><span class="glyphicon glyphicon-chevron-left"></span> Back</a>
+        <button type="button" class="btn btn-default btn-lg"><span class="glyphicon glyphicon-file"></span> Read paper</button>
+        <a href="files/AM207_Poster.pdf" type="button" class="btn btn-default btn-lg"><span class="glyphicon glyphicon-picture"></span> View poster</a>
+      </div>
+      </center>
+
+      <hr />
+
+      <div class="content">
+
+        <div>
+          <h2>Annotated Code Overview</h2>
+
+<p>
+The annotated code overview aims to give an IPython Notebook style introduction to the C++ codebase for the project.
+As there is no IPython Notebook equivalent for C++, none of the code is directly runnable, but having it mixed with full commentary can help in providing a fuller understanding of the codebase.
+We aim to introduce the primary components of the program without being limited to showing them in the same order that they appear in the C++ code.
+In unimportant places, source code will be elided for the sake of succinctness.
+In important sections, additional explanation beyond what the code itself provides may be used.
+
+<ul>
+  <li><i>Code may not appear in the same order as the full C++ file.</i> If it makes more sense to introduce something in a different order, that is what we do.
+</ul>
+</p>
+
+<h3>Boilerplate (elided)</h3>
+
+<button type="button" class="btn btn-default" data-toggle="collapse" data-target="#boilerplate">
+Show boilerplate code
+</button>
+
+<div id="boilerplate" class="collapse out">
+<pre><code class="cpp">// ==Montelight==
+// Tegan Brennan, Stephen Merity, Taiyo Wilson
+#include &lt;cmath&gt;
+#include &lt;string&gt;
+#include &lt;iomanip&gt;
+#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+#include &lt;sstream&gt;
+#include &lt;vector&gt;
+
+#define EPSILON 0.001f
+
+using namespace std;
+
+// Globals
+bool EMITTER_SAMPLING = true;</code></pre>
+</div>
+
+<h3>Vectors</h3>
+
+<p>
+In our task, all interactions happen in a three dimensional space: points or colours.
+The most convenient representation for this is a three dimensional Vector.
+For succinctness, and to prevent duplication of equivalent functionality, the Vector class is used for both points in space as well as the colours.
+</p>
+<h4>Vectors for points</h4>
+<p class="text-danger">
+dot, norm
+</p>
+<h4>Vectors for colours</h4>
+<p class="text-danger">
+Clamping
+</p>
+
+<pre><code class="cpp">struct Vector {
+  double x, y, z;
+  //
+  Vector(const Vector &amp;o) : x(o.x), y(o.y), z(o.z) {}
+  Vector(double x_=0, double y_=0, double z_=0) : x(x_), y(y_), z(z_) {}
+  inline Vector operator+(const Vector &amp;o) const {
+    return Vector(x + o.x, y + o.y, z + o.z);
+  }
+  inline Vector &amp;operator+=(const Vector &amp;rhs) {
+    x += rhs.x; y += rhs.y; z += rhs.z;
+    return *this;
+  }
+  inline Vector operator-(const Vector &amp;o) const {
+    return Vector(x - o.x, y - o.y, z - o.z);
+  }
+  inline Vector operator*(const Vector &amp;o) const {
+    return Vector(x * o.x, y * o.y, z * o.z);
+  }
+  inline Vector operator/(double o) const {
+    return Vector(x / o, y / o, z / o);
+  }
+  inline Vector operator*(double o) const {
+    return Vector(x * o, y * o, z * o);
+  }
+  inline double dot(const Vector &amp;o) const {
+    return x * o.x + y * o.y + z * o.z;
+  }
+  inline Vector &amp;norm(){
+    return *this = *this * (1 / sqrt(x * x + y * y + z * z));
+  }
+  inline Vector cross(Vector &amp;o){
+    return Vector(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x);
+  }
+  inline double min() {
+    return fmin(x, fmin(y, z));
+  }
+  inline double max() {
+    return fmax(x, fmax(y, z));
+  }
+  inline Vector &amp;abs() {
+    x = fabs(x); y = fabs(y); z = fabs(z);
+    return *this;
+  }
+  inline Vector &amp;clamp() {
+    // C++11 lambda function: http://en.cppreference.com/w/cpp/language/lambda
+    auto clampDouble = [](double x) {
+      if (x &lt; 0) return 0.0;
+      if (x &gt; 1) return 1.0;
+      return x;
+    };
+    x = clampDouble(x); y = clampDouble(y); z = clampDouble(z);
+    return *this;
+  }
+};</code></pre>
+
+<h3>Rays</h3>
+
+<p>
+In raytracing, our definition of a ray is quite simple.
+We tie together two Vectors to form a ray: position and direction.
+The ray can either extend to $\infty$ in the given direction or extend to the end of the direction vector itself.
+The latter might be useful if we wish to say that a ray hits a surface $n$ units in this given direction.
+</p>
+<p>
+Almost no logic is done on the ray class itself.
+Rays primarily provide a convenient way to pass around information.
+When rays are modified, their origin usually remains constant and only their direction is modified.
+</p>
+
+<pre><code class="cpp">struct Ray {
+  Vector origin, direction;
+  Ray(const Vector &amp;o_, const Vector &amp;d_) : origin(o_), direction(d_) {}
+};</code></pre>
+
+<h3>Image</h3>
+
+<h4>Storing and using samples</h4>
+
+<p>
+The image class is where we store the Monte Carlo samples from our scene.
+As you would expect, an image is defined by a given width and height, with each pixel in the grid of $width \times height$ being a Vector of [<span style="color:#B33">red</span>|<span style="color:#3B3">green</span>|<span style="color:#33B">blue</span>].
+When we take a new sample, we save the result by adding the raw red, green, and blue values to the relevant location in the $pixels$ array.
+We also add one to the number of $samples$ taken at that point such that we can work out the mean later.
+
+This allows us to trivially compute the expected mean over the number of samples by:
+
+$$
+Pixel(x, y) = \frac{Vector_{rgb}(x, y)}{Samples(x, y)} = \frac{1}{N} \sum Vector_{rgb}(x, y)
+$$
+
+<h4>Variance reduction helpers</h4>
+
+For use in our variance reduction attempts, we also keep track of the current value of a given pixel at $current(x, y)$ and also record the raw samples for a given pixel in $raw\_samples(x, y)$.
+We found in our experiments that keeping track of the raw samples leads to excessive overhead however, usually leading to worse results than just taking more samples in the time that would be have been spent performing bookkeeping.
+</p>
+
+<p class="text-danger">
+$getSurroundingAverage$
+</p>
+
+<h4>Exporting the image</h4>
+
+<p>
+In order to export the final image, an image format was required.
+Rather than using a complex format that would require an external library, we chose the PPM format.
+The <a href="http://en.wikipedia.org/wiki/Netpbm_format#PPM_example">PPM</a> is one of the simplest image formats to exist and consists entirely of an ASCII file that consists of 3 sets of numbers for each pixel -- red, green, and blue.
+Thanks to this, it is easy to write an exporter by hand and doesn't require any complex compression or encoding algorithms.
+The details of this function is in the $save$ function.
+</p>
+
+<p>
+The $toInt$ function is used to convert the Vector of [<span style="color:#B33">red</span>|<span style="color:#3B3">green</span>|<span style="color:#33B">blue</span>] into a final set of pixel values.
+The $toInt$ function performs gamma correction ($x ^ \frac{1}{2.2}$) and then scales the float, which is between 0 and 1, to be from 0 to 255.
+This allows us to represent the pixel in 24 bit colour (8 bits per pixel component) for the final image.
+</p>
+
+<pre><code class="cpp">struct Image {
+  unsigned int width, height;
+  Vector *pixels, *current;
+  unsigned int *samples;
+  std::vector&lt;Vector&gt; *raw_samples;
+  //
+  Image(unsigned int w, unsigned int h) : width(w), height(h) {
+    pixels = new Vector[width * height];
+    samples = new unsigned int[width * height];
+    current = new Vector[width * height];
+    //raw_samples = new std::vector&lt;Vector&gt;[width * height];
+  }
+  Vector getPixel(unsigned int x, unsigned int y) {
+    unsigned int index = (height - y - 1) * width + x;
+    return current[index];
+  }
+  void setPixel(unsigned int x, unsigned int y, const Vector &amp;v) {
+    unsigned int index = (height - y - 1) * width + x;
+    pixels[index] += v;
+    samples[index] += 1;
+    current[index] = pixels[index] / samples[index];
+    //raw_samples[index].push_back(v);
+  }
+  Vector getSurroundingAverage(int x, int y, int pattern=0) {
+    unsigned int index = (height - y - 1) * width + x;
+    Vector avg;
+    int total;
+    for (int dy = -1; dy &lt; 2; ++dy) {
+      for (int dx = -1; dx &lt; 2; ++dx) {
+        if (pattern == 0 &amp;&amp; (dx != 0 &amp;&amp; dy != 0)) continue;
+        if (pattern == 1 &amp;&amp; (dx == 0 || dy == 0)) continue;
+        if (dx == 0 &amp;&amp; dy == 0) {
+          continue;
+        }
+        if (x + dx &lt; 0 || x + dx &gt; width - 1) continue;
+        if (y + dy &lt; 0 || y + dy &gt; height - 1) continue;
+        index = (height - (y + dy) - 1) * width + (x + dx);
+        avg += current[index];
+        total += 1;
+      }
+    }
+    return avg / total;
+  }
+  inline double toInt(double x) {
+    return pow(x, 1 / 2.2f) * 255;
+  }
+  void save(std::string filePrefix) {
+    std::string filename = filePrefix + &quot;.ppm&quot;;
+    std::ofstream f;
+    f.open(filename.c_str(), std::ofstream::out);
+    // PPM header: P3 =&gt; RGB, width, height, and max RGB value
+    f &lt;&lt; &quot;P3 &quot; &lt;&lt; width &lt;&lt; &quot; &quot; &lt;&lt; height &lt;&lt; &quot; &quot; &lt;&lt; 255 &lt;&lt; std::endl;
+    // For each pixel, write the space separated RGB values
+    for (int i=0; i &lt; width * height; i++) {
+      auto p = pixels[i] / samples[i];
+      unsigned int r = fmin(255, toInt(p.x)), g = fmin(255, toInt(p.y)), b = fmin(255, toInt(p.z));
+      f &lt;&lt; r &lt;&lt; &quot; &quot; &lt;&lt; g &lt;&lt; &quot; &quot; &lt;&lt; b &lt;&lt; std::endl;
+    }
+  }
+  void saveHistogram(std::string filePrefix, int maxIters) {
+    std::string filename = filePrefix + &quot;.ppm&quot;;
+    std::ofstream f;
+    f.open(filename.c_str(), std::ofstream::out);
+    // PPM header: P3 =&gt; RGB, width, height, and max RGB value
+    f &lt;&lt; &quot;P3 &quot; &lt;&lt; width &lt;&lt; &quot; &quot; &lt;&lt; height &lt;&lt; &quot; &quot; &lt;&lt; 255 &lt;&lt; std::endl;
+    // For each pixel, write the space separated RGB values
+    for (int i=0; i &lt; width * height; i++) {
+      auto p = samples[i] / maxIters;
+      unsigned int r, g, b;
+      r= g = b = fmin(255, 255 * p);
+      f &lt;&lt; r &lt;&lt; &quot; &quot; &lt;&lt; g &lt;&lt; &quot; &quot; &lt;&lt; b &lt;&lt; std::endl;
+    }
+  }
+  ~Image() {
+    delete[] pixels;
+    delete[] samples;
+  }
+};</code></pre>
+
+<pre><code class="cpp">struct Shape {
+  Vector color, emit;
+  //
+  Shape(const Vector color_, const Vector emit_) : color(color_), emit(emit_) {}
+  virtual double intersects(const Ray &amp;r) const { return 0; }
+  virtual Vector randomPoint() const { return Vector(); }
+  virtual Vector getNormal(const Vector &amp;p) const { return Vector(); }
+};
+
+struct Sphere : Shape {
+  Vector center;
+  double radius;
+  //
+  Sphere(const Vector center_, double radius_, const Vector color_, const Vector emit_) :
+    Shape(color_, emit_), center(center_), radius(radius_) {}
+  double intersects(const Ray &amp;r) const {
+    // Find if, and at what distance, the ray intersects with this object
+    // Equation follows from solving quadratic equation of (r - c) ^ 2
+    // http://wiki.cgsociety.org/index.php/Ray_Sphere_Intersection
+    Vector offset = r.origin - center;
+    double a = r.direction.dot(r.direction);
+    double b = 2 * offset.dot(r.direction);
+    double c = offset.dot(offset) - radius * radius;
+    // Find discriminant for use in quadratic equation (b^2 - 4ac)
+    double disc = b * b - 4 * a * c;
+    // If the discriminant is negative, there are no real roots
+    // (ray misses sphere)
+    if (disc &lt; 0) {
+      return 0;
+    }
+    // The smallest positive root is the closest intersection point
+    disc = sqrt(disc);
+    double t = - b - disc;
+    if (t &gt; EPSILON) {
+      return t / 2;
+    }
+    t = - b + disc;
+    if (t &gt; EPSILON) {
+      return t / 2;
+    }
+    return 0;
+  }
+  Vector randomPoint() const {
+    // TODO: Improved methods of random point generation as this is not 100% even
+    // See: https://www.jasondavies.com/maps/random-points/
+    //
+    // Get random spherical coordinates on light
+    double theta = drand48() * M_PI;
+    double phi = drand48() * 2 * M_PI;
+    // Convert to Cartesian and scale by radius
+    double dxr = radius * sin(theta) * cos(phi);
+    double dyr = radius * sin(theta) * sin(phi);
+    double dzr = radius * cos(theta);
+    return Vector(center.x + dxr, center.y + dyr, center.z + dzr);
+  }
+  Vector getNormal(const Vector &amp;p) const {
+    // Point must have collided with surface of sphere which is at radius
+    // Normalize the normal by using radius instead of a sqrt call
+    return (p - center) / radius;
+  }
+};</code></pre>
+
+<pre><code class="cpp">// Set up our testing scenes
+// They're all Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
+/////////////////////////
+// Scene format: Sphere(position, radius, color, emission)
+/////////////////////////
+std::vector&lt;Shape *&gt; simpleScene = {
+  // Left sphere
+  new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()),
+  // Right sphere
+  new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()),
+  // Back sphere
+  new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()),
+  // Floor sphere
+  new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),
+  // Roof sphere
+  new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),
+  // Traditional mirror sphere
+  new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  // Traditional glass sphere
+  new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  // Light source
+  //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12))
+  new Sphere(Vector(50,65.1,81.6), 8.5, Vector(), Vector(4,4,4) * 100) // Small = 1.5, Large = 8.5
+};
+/////////////////////////
+std::vector&lt;Shape *&gt; complexScene = {
+  new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()), // Left
+  new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()), // Right
+  new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()), // Back
+  new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()), //Bottom
+  new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()), // Top
+  new Sphere(Vector(20,16.5,40), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  new Sphere(Vector(50,16.5,80), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  new Sphere(Vector(75,16.5,120), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  new Sphere(Vector(50,65.1,40), 1.5, Vector(), Vector(4,4,4) * 100), // Light
+  new Sphere(Vector(50,65.1,120), 1.5, Vector(), Vector(4,4,4) * 100), // Light
+};
+//</code></pre>
+
+<pre><code class="cpp">struct Tracer {
+  std::vector&lt;Shape *&gt; scene;
+  //
+  Tracer(const std::vector&lt;Shape *&gt; &amp;scene_) : scene(scene_) {}
+  std::pair&lt;Shape *, double&gt; getIntersection(const Ray &amp;r) const {
+    Shape *hitObj = NULL;
+    double closest = 1e20f;
+    for (Shape *obj : scene) {
+      double distToHit = obj-&gt;intersects(r);
+      if (distToHit &gt; 0 &amp;&amp; distToHit &lt; closest) {
+        hitObj = obj;
+        closest = distToHit;
+      }
+    }
+    return std::make_pair(hitObj, closest);
+  }
+  Vector getRadiance(const Ray &amp;r, int depth) {
+    // Work out what (if anything) was hit
+    auto result = getIntersection(r);
+    Shape *hitObj = result.first;
+    // Russian Roulette sampling based on reflectance of material
+    double U = drand48();
+    if (depth &gt; 4 &amp;&amp; (depth &gt; 20 || U &gt; hitObj-&gt;color.max())) {
+      return Vector();
+    }
+    Vector hitPos = r.origin + r.direction * result.second;
+    Vector norm = hitObj-&gt;getNormal(hitPos);
+    // Orient the normal according to how the ray struck the object
+    if (norm.dot(r.direction) &gt; 0) {
+      norm = norm * -1;
+    }
+    // Work out the contribution from directly sampling the emitters
+    Vector lightSampling;
+    if (EMITTER_SAMPLING) {
+      for (Shape *light : scene) {
+        // Skip any objects that don't emit light
+        if (light-&gt;emit.max() == 0) {
+          continue;
+        }
+        Vector lightPos = light-&gt;randomPoint();
+        Vector lightDirection = (lightPos - hitPos).norm();
+        Ray rayToLight = Ray(hitPos, lightDirection);
+        auto lightHit = getIntersection(rayToLight);
+        if (light == lightHit.first) {
+          double wi = lightDirection.dot(norm);
+          if (wi &gt; 0) {
+            double srad = 1.5;
+            //double srad = 600;
+            double cos_a_max = sqrt(1-srad*srad/(hitPos - lightPos).dot(hitPos - lightPos));
+            double omega = 2*M_PI*(1-cos_a_max);
+            lightSampling += light-&gt;emit * wi * omega * M_1_PI;
+          }
+        }
+      }
+    }
+    // Work out contribution from reflected light
+    // Diffuse reflection condition:
+    // Create orthogonal coordinate system defined by (x=u, y=v, z=norm)
+    double angle = 2 * M_PI * drand48();
+    double dist_cen = sqrt(drand48());
+    Vector u;
+    if (fabs(norm.x) &gt; 0.1) {
+      u = Vector(0, 1, 0);
+    } else {
+      u = Vector(1, 0, 0);
+    }
+    u = u.cross(norm).norm();
+    Vector v = norm.cross(u);
+    // Direction of reflection
+    Vector d = (u * cos(angle) * dist_cen + v * sin(angle) * dist_cen + norm * sqrt(1 - dist_cen * dist_cen)).norm();
+
+    // Recurse
+    Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
+    //
+    if (!EMITTER_SAMPLING || depth == 0) {
+      return hitObj-&gt;emit + hitObj-&gt;color * lightSampling + hitObj-&gt;color * reflected;
+    }
+    return hitObj-&gt;color * lightSampling + hitObj-&gt;color * reflected;
+  }
+};
+</code></pre>
+
+<pre><code class="cpp">int main(int argc, const char *argv[]) {
+  /////////////////////////
+  // Variables to modify the process or the images
+  EMITTER_SAMPLING = true;
+  int w = 256, h = 256;
+  int SNAPSHOT_INTERVAL = 25;
+  unsigned int SAMPLES = 100;
+  bool FOCUS_EFFECT = true;
+  double FOCAL_LENGTH = 20;
+  double APERTURE_FACTOR = 0.5; // ratio of original/new aperture (&gt;1: smaller view angle, &lt;1: larger view angle)
+  // Initialize the image
+  Image img(w, h);
+  /////////////////////////
+  // Set which scene should be raytraced
+  auto &amp;scene = complexScene;
+  Tracer tracer = Tracer(scene);
+</code></pre>
+
+<pre><code class="cpp">  /////////////////////////
+  // Set up the camera
+  double aperture = 0.5135 / APERTURE_FACTOR;
+  Vector cx = Vector((w * aperture) / h, 0, 0);
+  Vector dir_norm = Vector(0, -0.042612, -1).norm();
+  double L = 140;
+  double L_new = APERTURE_FACTOR * L;
+  double L_diff = L - L_new;
+  Vector cam_shift = dir_norm * (L_diff);
+  if (L_diff &lt; 0){
+    cam_shift = cam_shift * 1.5;
+  }
+  L = L_new;
+  Ray camera = Ray(Vector(50, 52, 295.6) + cam_shift, dir_norm);
+  // Cross product gets the vector perpendicular to cx and the &quot;gaze&quot; direction
+  Vector cy = (cx.cross(camera.direction)).norm() * aperture;
+</code></pre>
+<pre><code class="cpp">  /////////////////////////
+  // Take a set number of samples per pixel
+  for (int sample = 0; sample &lt; SAMPLES; ++sample) {
+    std::cout &lt;&lt; &quot;Taking sample &quot; &lt;&lt; sample &lt;&lt; &quot;\r&quot; &lt;&lt; std::flush;
+    if (sample &amp;&amp; sample % SNAPSHOT_INTERVAL == 0) {
+      std::ostringstream fn;
+      fn &lt;&lt; std::setfill('0') &lt;&lt; std::setw(5) &lt;&lt; sample;
+      img.save(&quot;temp/render_&quot; + fn.str());
+    }
+    // For each pixel, sample a ray in that direction
+    for (int y = 0; y &lt; h; ++y) {
+      for (int x = 0; x &lt; w; ++x) {
+</code></pre>
+<pre><code class="cpp">        /*
+        Vector target = img.getPixel(x, y);
+        double A = (target - img.getSurroundingAverage(x, y, sample % 2)).abs().max() / (100 / 255.0);
+        if (sample &gt; 10 &amp;&amp; drand48() &gt; A) {
+          continue;
+        }
+        ++updated;
+        */
+</code></pre>
+
+<h2>Tent filter</h2>
+
+<p>
+Using a tent filter is an example of a <a href="http://en.wikipedia.org/wiki/Quasi-Monte_Carlo_method">quasi-Monte Carlo method</a>.
+In certain problems, we know we would prefer something other than a pseudo-random sequence.
+With better chosen sequences of samples, usually low-discrepancy sequences, quasi-Monte Carlo has a rate of convergence close to $O(\frac{1}{N})$, whereas the rate for the Monte Carlo method is $O(N^{-0.5})$.
+</p>
+
+<p>
+In our situation, we want to select a sequence that will provide better anti-aliasing than randomly chosen points.
+The tent filter is an example of a reconstruction filter (or anti-imaging filter) that is used to construct a smooth analogue signal from a digital input.
+Below is a scatter plot of the 2,500 points passed through a tent filter compared to 2,500 random points.
+Notice how the edges and the corners in particular are avoided.
+This prevents aliasing in situations such as <a href="http://en.wikipedia.org/wiki/Spatial_anti-aliasing#Examples">a checkerboard heading off to infinity</a>.
+</p>
+
+<center>
+<img src="img/tent.png" />
+</center>
+
+<pre><code class="cpp">
+        // Jitter pixel randomly in dx and dy according to the tent filter
+        double Ux = 2 * drand48();
+        double Uy = 2 * drand48();
+        double dx;
+        if (Ux &lt; 1) {
+          dx = sqrt(Ux) - 1;
+        } else {
+          dx = 1 - sqrt(2 - Ux);
+        }
+        double dy;
+        if (Uy &lt; 1) {
+          dy = sqrt(Uy) - 1;
+        } else {
+          dy = 1 - sqrt(2 - Uy);
+        }
+</code></pre>
+<pre><code class="cpp">        // Calculate the direction of the camera ray
+        Vector d = (cx * (((x+dx) / float(w)) - 0.5)) + (cy * (((y+dy) / float(h)) - 0.5)) + camera.direction;
+        Ray ray = Ray(camera.origin + d * 140, d.norm());
+        // If we're actually using depth of field, we need to modify the camera ray to account for that
+        if (FOCUS_EFFECT) {
+          // Calculate the focal point
+          Vector fp = (camera.origin + d * L) + d.norm() * FOCAL_LENGTH;
+          // Get a pixel point and new ray direction to calculate where the rays should intersect
+          Vector del_x = (cx * dx * L / float(w));
+          Vector del_y = (cy * dy * L / float(h));
+          Vector point = camera.origin + d * L;
+          point = point + del_x + del_y;
+          d = (fp - point).norm();
+          ray = Ray(camera.origin + d * L, d.norm());
+        }
+</code></pre>
+<pre><code class="cpp">        // Retrieve the radiance of the given hit location (i.e. brightness of the pixel)
+        Vector rads = tracer.getRadiance(ray, 0);
+        // Clamp the radiance so it is between 0 and 1
+        // If we don't do this, antialiasing doesn't work properly on bright lights
+        rads.clamp();
+        // Add result of sample to image
+        img.setPixel(x, y, rads);
+      }
+    }
+  }
+  // Save the resulting raytraced image
+  img.save(&quot;render&quot;);
+  return 0;
+}</code></pre>
+
+<hr />
+
+        </div>
+
+        <div class="footer">
+          <p>T. Brennan, S. Merity, T. Wilson 2014</p>
+        </div>
+
+      </div>
+
+    </div> <!-- /container -->
+
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+    <script src="https://code.jquery.com/jquery.js"></script>
+    <!-- Include all compiled plugins (below), or include individual files as needed -->
+    <script src="//netdna.bootstrapcdn.com/bootstrap/3.0.2/js/bootstrap.min.js"></script>
+  </body>
+</html>
