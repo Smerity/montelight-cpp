@@ -12,6 +12,48 @@
 
 using namespace std;
 
+// Globals
+bool EMITTER_SAMPLING = true;
+
+// Set up our testing scenes
+// They're all Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
+/////////////////////////
+// Scene format: Sphere(position, radius, color, emission)
+/////////////////////////
+std::vector<Shape *> simpleScene = {
+  // Left sphere
+  new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()),
+  // Right sphere
+  new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()),
+  // Back sphere
+  new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()),
+  // Floor sphere
+  new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),
+  // Roof sphere
+  new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),
+  // Traditional mirror sphere
+  new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  // Traditional glass sphere
+  new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  // Light source
+  //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12))
+  new Sphere(Vector(50,65.1,81.6), 8.5, Vector(), Vector(4,4,4) * 100) // Small = 1.5, Large = 8.5
+};
+/////////////////////////
+std::vector<Shape *> complexScene = {
+  new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()), // Left
+  new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()), // Right
+  new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()), // Back
+  new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()), //Bottom
+  new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()), // Top
+  new Sphere(Vector(20,16.5,40), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  new Sphere(Vector(50,16.5,80), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  new Sphere(Vector(75,16.5,120), 16.5f, Vector(1,1,1) * 0.799, Vector()),
+  new Sphere(Vector(50,65.1,40), 1.5, Vector(), Vector(4,4,4) * 100), // Light
+  new Sphere(Vector(50,65.1,120), 1.5, Vector(), Vector(4,4,4) * 100), // Light
+};
+//
+
 struct Vector {
   double x, y, z;
   //
@@ -194,19 +236,20 @@ struct Sphere : Shape {
     return 0;
   }
   Vector randomPoint() const {
-    // TODO: Improved methods of random point generation
-    // https://www.jasondavies.com/maps/random-points/
+    // TODO: Improved methods of random point generation as this is not 100% even
+    // See: https://www.jasondavies.com/maps/random-points/
     //
     // Get random spherical coordinates on light
     double theta = drand48() * M_PI;
     double phi = drand48() * 2 * M_PI;
-    // Convert to Cartesian
+    // Convert to Cartesian and scale by radius
     double dxr = radius * sin(theta) * cos(phi);
     double dyr = radius * sin(theta) * sin(phi);
     double dzr = radius * cos(theta);
     return Vector(center.x + dxr, center.y + dyr, center.z + dzr);
   }
   Vector getNormal(const Vector &p) const {
+    // Point must have collided with surface of sphere which is at radius
     // Normalize the normal by using radius instead of a sqrt call
     return (p - center) / radius;
   }
@@ -229,7 +272,6 @@ struct Tracer {
     return std::make_pair(hitObj, closest);
   }
   Vector getRadiance(const Ray &r, int depth) {
-    bool _EMITTER_SAMPLING = true;
     // Work out what (if anything) was hit
     auto result = getIntersection(r);
     Shape *hitObj = result.first;
@@ -246,7 +288,7 @@ struct Tracer {
     }
     // Work out the contribution from directly sampling the emitters
     Vector lightSampling;
-    if (_EMITTER_SAMPLING) {
+    if (EMITTER_SAMPLING) {
       for (Shape *light : scene) {
         // Skip any objects that don't emit light
         if (light->emit.max() == 0) {
@@ -287,7 +329,7 @@ struct Tracer {
     // Recurse
     Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
     //
-    if (!_EMITTER_SAMPLING || depth == 0) {
+    if (!EMITTER_SAMPLING || depth == 0) {
       return hitObj->emit + hitObj->color * lightSampling + hitObj->color * reflected;
     }
     return hitObj->color * lightSampling + hitObj->color * reflected;
@@ -295,49 +337,46 @@ struct Tracer {
 };
 
 int main(int argc, const char *argv[]) {
-  // Initialize the image
+  /////////////////////////
+  // Variables to modify the process or the images
+  EMITTER_SAMPLING = true;
   int w = 256, h = 256;
+  int SNAPSHOT_INTERVAL = 25;
+  unsigned int SAMPLES = 100;
+  bool FOCUS_EFFECT = true;
+  double FOCAL_LENGTH = 20;
+  double APERTURE_FACTOR = 0.5; // ratio of original/new aperture (>1: smaller view angle, <1: larger view angle)
+  // Initialize the image
   Image img(w, h);
-  // Set up the scene
-  // Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
-  std::vector<Shape *> scene = {//Scene: position, radius, color, emission; not yet added: material
-    // Left sphere
-    new Sphere(Vector(1e5+1,40.8,81.6), 1e5f, Vector(.75,.25,.25), Vector()),
-    // Right sphere
-    new Sphere(Vector(-1e5+99,40.8,81.6), 1e5f, Vector(.25,.25,.75), Vector()),
-    // Back sphere
-    new Sphere(Vector(50,40.8, 1e5), 1e5f, Vector(.75,.75,.75), Vector()),
-    // Floor sphere
-    new Sphere(Vector(50, 1e5, 81.6), 1e5f, Vector(.75,.75,.75), Vector()),
-    // Roof sphere
-    new Sphere(Vector(50,-1e5+81.6,81.6), 1e5f, Vector(.75,.75,.75), Vector()),
-    // Traditional mirror sphere
-    new Sphere(Vector(27,16.5,47), 16.5f, Vector(1,1,1) * 0.799, Vector()),
-    // Traditional glass sphere
-    new Sphere(Vector(73,16.5,78), 16.5f, Vector(1,1,1) * 0.799, Vector()),
-    // Light source
-    //new Sphere(Vector(50,681.6-.27,81.6), 600, Vector(1,1,1) * 0.5, Vector(12,12,12))
-    new Sphere(Vector(50,65.1,81.6), 8.5, Vector(), Vector(4,4,4) * 100) // Small = 1.5, Large = 8.5
-  };
+  /////////////////////////
+  // Set which scene should be raytraced
+  auto &scene = complexScene;
   Tracer tracer = Tracer(scene);
+  /////////////////////////
   // Set up the camera
-  Ray camera = Ray(Vector(50, 52, 295.6), Vector(0, -0.042612, -1).norm());
-  // Upright camera with field of view angle set by 0.5135
-  Vector cx = Vector((w * 0.5135) / h, 0, 0);
+  double aperture = 0.5135 / APERTURE_FACTOR;
+  Vector cx = Vector((w * aperture) / h, 0, 0);
+  Vector dir_norm = Vector(0, -0.042612, -1).norm();
+  double L = 140;
+  double L_new = APERTURE_FACTOR * L;
+  double L_diff = L - L_new;
+  Vector cam_shift = dir_norm * (L_diff);
+  if (L_diff < 0){
+    cam_shift = cam_shift * 1.5;
+  }
+  L = L_new;
+  Ray camera = Ray(Vector(50, 52, 295.6) + cam_shift, dir_norm);
   // Cross product gets the vector perpendicular to cx and the "gaze" direction
-  Vector cy = (cx.cross(camera.direction)).norm() * 0.5135;
+  Vector cy = (cx.cross(camera.direction)).norm() * aperture;
+  /////////////////////////
   // Take a set number of samples per pixel
-  unsigned int SAMPLES = 800;
-  unsigned int updated;
   for (int sample = 0; sample < SAMPLES; ++sample) {
-    std::cout << "Taking sample " << sample << ": " << updated << " pixels updated\r" << std::flush;
-    if (sample && sample % 25 == 0) {
+    std::cout << "Taking sample " << sample << "\r" << std::flush;
+    if (sample && sample % SNAPSHOT_INTERVAL == 0) {
       std::ostringstream fn;
       fn << std::setfill('0') << std::setw(5) << sample;
       img.save("temp/render_" + fn.str());
-      img.saveHistogram("temp/hist_" + fn.str(), sample / 2.0);
     }
-    updated = 0;
     // For each pixel, sample a ray in that direction
     for (int y = 0; y < h; ++y) {
       for (int x = 0; x < w; ++x) {
@@ -367,8 +406,22 @@ int main(int argc, const char *argv[]) {
         // Calculate the direction of the camera ray
         Vector d = (cx * (((x+dx) / float(w)) - 0.5)) + (cy * (((y+dy) / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
+        // If we're actually using depth of field, we need to modify the camera ray to account for that
+        if (FOCUS_EFFECT) {
+          // Calculate the focal point
+          Vector fp = (camera.origin + d * L) + d.norm() * FOCAL_LENGTH;
+          // Get a pixel point and new ray direction to calculate where the rays should intersect
+          Vector del_x = (cx * dx * L / float(w));
+          Vector del_y = (cy * dy * L / float(h));
+          Vector point = camera.origin + d * L;
+          point = point + del_x + del_y;
+          d = (fp - point).norm();
+          ray = Ray(camera.origin + d * L, d.norm());
+        }
+        // Retrieve the radiance of the given hit location (i.e. brightness of the pixel)
         Vector rads = tracer.getRadiance(ray, 0);
         // Clamp the radiance so it is between 0 and 1
+        // If we don't do this, antialiasing doesn't work properly on bright lights
         rads.clamp();
         // Add result of sample to image
         img.setPixel(x, y, rads);
@@ -377,6 +430,5 @@ int main(int argc, const char *argv[]) {
   }
   // Save the resulting raytraced image
   img.save("render");
-  img.saveHistogram("hist", SAMPLES / 2.);
   return 0;
 }
