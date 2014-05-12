@@ -76,7 +76,7 @@
       <center>
       <div class="btn-toolbar" role="toolbar">
         <a href="code_overview.html" type="button" class="btn btn-default btn-lg"><span class="glyphicon glyphicon-star"></span> Annotated code overview</a>
-        <button type="button" class="btn btn-default btn-lg"><span class="glyphicon glyphicon-file"></span> Read paper</button>
+        <a href="files/AM207_Paper.pdf" type="button" class="btn btn-default btn-lg"><span class="glyphicon glyphicon-file"></span> Read paper</a>
         <a href="files/AM207_Poster.pdf" type="button" class="btn btn-default btn-lg"><span class="glyphicon glyphicon-picture"></span> View poster</a>
       </div>
       </center>
@@ -86,15 +86,24 @@
       <div class="content">
 
         <div>
+
+          <h2>Overview</h2>
+
+          <p>
+          Stochastic ray tracing is one of the fundamental algorithms in computer graphics for generating photo-realistic images.
+          We implement an unbiased Monte Carlo renderer as an experimental testbed for evaluating improved sampling strategies.
+          Our results show that the improved sampling methods we use for rendering can give comparable image quality over <b><span style="color:#3A3;">twenty times faster</span></b> than naive Monte Carlo methods.
+          </p>
+
+          <hr />
+
           <h2>Approach</h2>
 
 <p>
 To simulate the global reflection of light throughout a scene, we need to consider how light moves around the scene.
-This is referred to as the light transport equation, described in \cite{kajiya1986rendering}.
-The light transport equation states that the radiance of a point is the sum of the self-emitted radiance (glow) and the reflected radiance.
-This value is then distributed according to the material's bidirectional reflectance distribution function (BRDF), which is detailed more in the next section.
-Intuitively, the BRDF looks at the angle of the reflected light and the outgoing angle to decide how much light should go in that direction.
-If the BRDF states the surface is perfectly mirror like, for example, only very specific angles make a contribution to the reflected radiance.
+This is referred to as the light transport equation, described in <a href="http://www.cse.chalmers.se/edu/year/2011/course/TDA361/2007/rend_eq.pdf">Kajiya (1986)</a>.
+The basic idea is light is either produced by the object (emission) or reflected onto it from other objects (reflected).
+For full details, refer to our paper.
 </p>
 
 <p>
@@ -107,56 +116,54 @@ L_{out}(x, \theta_o) & = L_{emit}(x, \theta_o) + L_{reflected}(x, \theta_o) \\
 
 <p>
 The integral for the reflected light is computed over the hemisphere of all possible incoming directions.
-As this is impossible to compute exactly, it is approximated using Monte Carlo methods, turning the integral into a finite sum of samples.
+As this is impossible to compute exactly, it is approximated using Monte Carlo methods.
 The primary issue that can occur is when noise is too strong to give reasonable estimations as to the radiance.
 Whilst the expected value remains accurate, the standard deviation (error) decreases by $\frac{1}{\sqrt{n}}$, where $n$ is the number of samples.
 To achieve a noise free image requires a large number of samples, especially if the scene is complex.
 </p>
 
+<h2>Importance sampling using BRDF sampling</h2>
+
+<p>
+Some materials only allow light in very specific directions.
+This is commonly related to the roughness of the material.
+A mirror, such as the one on the left, needs far less samples than the diffuse surface on the right.
+</p>
+
+<p>
+<center>
+  <img src="img/roughness.png" />
+</center>
+</p>
+
+<p>
+This is dictated by the material's Bidirectional Reflectance Distribution Function (BRDF).
+This distribution function dictates how much light ends up reflected in a given direction.
+By sampling directions to test directly from this distribution function (importance sampling), we can avoid taking samples that contribute little to the final image.
+</p>
+
+<p>
+<center>
+  <img src="img/brdf_montage.png" />
+  <p><em>Uniform sampling of the potential bounce directions (blue) versus BRDF sampling (orange).</em></p>
+</center>
+</p>
+
 <h2>Importance sampling using explicit light sampling</h2>
 
 <p>
-In an unbiased Monte Carlo renderer, the light path being sampled must hit a luminaire (light source) before it can make any contribution to the radiance of a given pixel.
-When the luminaire is small, the probability that a random light path will intersect with it is highly unlikely, requiring a larger and larger number of light paths to be sampled, most of which contribute nothing to the radiance.
-These small but high intensity luminaires are not uncommon in computer graphics, with the most common example being the sun, which although small dominates the light contribution to most scenes.
+In an unbiased Monte Carlo renderer, the light path being sampled must hit a light source (luminaire) before it can make any contribution to the radiance of a given pixel.
+When the luminaire is small, the probability that a random light path will intersect with it is highly unlikely, requiring a larger and larger number of light paths to be sampled.
+By exploiting our knowledge of the scene, specifically the location of these light sources, we can perform importance sampling towards their locations.
+By sampling towards the light and checking if any other objects intervene (a "shadow ray"), we don't need to wait for chance to point us to our strongest light contribution in the scene.
 </p>
 
-<p>
-By exploiting our knowledge of the scene, specifically the location of these luminaires, we can perform importance sampling towards the location of the light sources \citep{shirley1996monte}.
-To do this, we select a random point on any surface that emits light (luminaire).
-We then check whether the given random point is visible from the hit position.
-If it isn't, the light source is not visible, resulting in no light contribution.
-If the random point is visible, we compute what portion of the light is reflected towards the outgoing light path according to the BRDF function.
-</p>
-
-<p>
-Selecting a random point is important.
-Imagine sampling from a sphere.
-If a single point was used, such as the center, all shadows generated by that luminaire would be perfect hard projections of the shapes.
-If multiple points are used, evenly distributed over the sphere, the shadows would have a penumbra (partially shaded outer region of a cast shadow) related in size to the sphere.
-Taken over an infinite number of samples, and assuming that the selected point from the luminaire was generated truly at random, each of the points on the luminaire would be sampled evenly.
-</p>
-
-<p>
-Adding explicit light sampling does change the way in which the light transport equation must work however.
-On the first bounce of the light path where the path is directly from the image plane to the scene ($depth = 0$), the light transport equation is:
-
-$$L_o(x, \theta_o) = \text{emitted from object} + \text{light from luminaires} + \text{reflected onto object}$$
-
-For all subsequent steps ($depth > 0$), the light transport equation drops the first term:
-
-$$L_o(x, \theta_o) = \text{light from luminaires} + \text{reflected onto object}$$
-
-This is required as otherwise double counting would occur.
-</p>
-
-<h3>Impact of explicit light sampling</h3>
+<center><img src="img/raytracing_diagram.png" height="250px" /></center>
 
 <p>
 In the two animated images below, we can see the impact that explicit light sampling has on rendering.
 The animated image that does not use explicit light sampling begins almost completely black, adding speckled light over time.
 This is as the majority of light paths never end up at the small light source.
-If the light path does not hit a light source, it never contributes any information to the scene.
 </p>
 <p>
 The animated image with explicit light sampling is comparitively boring.
@@ -179,7 +186,40 @@ The image on the right uses only 50 samples but performs importance sampling usi
 </p>
 </center>
 
-<hr />
+<h2>Rejection sampling via Russian roulette path termination</h2>
+
+<p>
+Bright photons in real life may bounce millions of times, but computing such a long path is intensive and contributes little to the final result.
+Stopping after a ﬁnite number of bounces can result in significant bias however.
+</p>
+<p>
+Instead, we introduce <em>Russian roulette path termination</em>, where at each bounce we terminate the light path with probability $q$.
+This probability is selected proportional to the overall reflective properties of the material.
+This means bright objects encourage more bounces whilst dark objects encourage less.
+As dark objects absorb more light, this means that terminating the path early is unlikely to increase the noise in the image.
+</p>
+
+<center>
+<img src="img/russian_montage.png" \>
+<p>
+<em>
+  The first three images have a maximum allowed light path length of 1, 2, and 3, taking 18 seconds, 31 seconds and 58 seconds respectively.<br />
+The image on the right uses Russian roulette path termination, taking 83 seconds.
+</em>
+</p>
+</center>
+
+<p>
+Whilst in our scene, extreme bias can primarily be seen in images of maximum allowed light path length of 1 and 2,
+extreme bias can still be visible in more complex scenes even with max depths of 10 or more.
+</p>
+
+<h2>Simulating physical phenomena</h2>
+
+<p>
+Monte Carlo methods allow easy emulation of physical phenomena such as camera lenses, including aperture size and focal length.
+This can be extended to other physical phenomena including motion blur, which is simply performing Monte Carlo sampling over time as well.
+</p>
 
 <center>
 <img src="img/fov.png" width="512" />
@@ -220,12 +260,28 @@ The image on the right uses only 50 samples but performs importance sampling usi
     <span class="glyphicon glyphicon-chevron-right"></span>
   </a>
 </div>
+<p>
+<em>
+Impact of various focal lengths on the resulting image.<br />
+Note how the first few are "flat" whilst the latter ones appear stretched.
+</em>
+</p>
 </center>
 
-<hr />
+<p>
+When we modify aperture size and focal length, we also modify how the camera samples pixels from the shot.
+For each pixel in our image, samples are taken over multiple rays, each sent at slightly different angles, all converging at the focal length.
+By using Monte Carlo sampling, we approximate sampling over all possible rays, resulting in a physically accurate blur in the foreground and background.
+</p>
 
 <center>
 <img src="img/dofb.png" width="512" />
+<p>
+<em>
+  Exaggerated depth of field to emphasise the accurate blur produced by Monte Carlo sampling.<br />
+  This can be combined with variance reduction such that more samples are taken in the less defined, blurrier parts of the image.
+</em>
+</p>
 </center>
 
 <hr />
