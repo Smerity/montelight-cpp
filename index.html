@@ -214,6 +214,24 @@ Whilst in our scene, extreme bias can primarily be seen in images of maximum all
 extreme bias can still be visible in more complex scenes even with max depths of 10 or more.
 </p>
 
+<h2>Variance reduction</h2>
+
+<p>
+Monte Carlo raytracers traditionally work by taking a specified number of samples for every pixel in the image. 
+Though this is guaranteed to produce a desirable result for large enough $n$, it can lead to substantial computational effort being spent on pixels that do not require any additional samples.
+</p>
+<p>
+Motivated by this understanding, we implemented adaptive sampling, which would perform samples on pixels according to rejection sampling of the perceived variance.
+The perceived variance is defined either by the variance of the individual pixel or the expected variance when compared to neighbouring pixels.
+Unfortunately, we found that the large amount of overhead required to perform these calculations is less efficient than simply performing more samples.
+Whilst the results produced were of comparable quality, the overhead necessary to store all the samples stored was too large to be offset by any of our computational gains.
+</p>
+
+<center>
+  <img src="img/render_variances.png" \>
+  <p><em>The accompanying image displays the relative variances of the pixels in the image, with pixels of higher variance colored darker than those of lighter variance.<br />Here the variance was measured solely based on the history of the individual pixels.</em><p>
+</center>
+
 <h2>Simulating physical phenomena</h2>
 
 <p>
