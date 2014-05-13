@@ -442,6 +442,17 @@ Recently Dunbar et al. (2006) proposed using <a href="http://www.cs.virginia.edu
   }
 };</code></pre>
 
+<h2>Test scenes</h2>
+
+<p> Our test scenes are all based on <a href="http://graphics.ucsd.edu/~henrik/images/cbox.html">the Cornell box</a>. Each scene defined
+as a vector of <em>Shape</em> objects, in our case they are all <em>Sphere</em> objects, including the walls, which are just positioned
+and scaled so as to appear approximately flat in our scene. The first scene, <em>simpleScene</em> is the standard Cornell box scene, but with a custom light source
+positioned near the ceiling. The second scene, <em>complexScene</em> contains three spheres located at different distances from the camera.
+From the point of view of the camera, the edges of the three spheres overlap. If the focal length is set properly with a sufficiently narrow
+depth of field, this scene should make it easy to observe the focusing effect.
+
+</p>
+
 <pre><code class="cpp">// Set up our testing scenes
 // They're all Cornell box inspired: http://graphics.ucsd.edu/~henrik/images/cbox.html
 /////////////////////////
@@ -566,7 +577,12 @@ std::vector&lt;Shape *&gt; complexScene = {
 <h2>Setting up the camera</h2>
 
 <p>
-
+We first have a number of parameters that the user can modify to change the kind of sampling performed on the scene. <em>EMITTER_SAMPLING</em>
+turns on and off emitter sampling. $w$ and $h$ adjust the size of the image processed. <em>SNAPSHOT_INTERVAL</em> determines how many
+samples should be taken before another snapshot is taken. <em>SAMPLES</em> specifies the total number of samples taken. <em>FOCUS_EFFECT</em> turns
+on and off the focusing effect (see 'Focusing' section), and the <em>FOCAL_LENGTH</em> determines at what distance from the camera objects in the
+scene will be most in focus. <em>APERTURE_FACTOR</em> is used to divide the default aperture size in order to increase or decrease the field of view
+of the camera. We also specify which scene we want to sample.
 </p>
 
 <pre><code class="cpp">int main(int argc, const char *argv[]) {
