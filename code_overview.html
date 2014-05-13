@@ -574,11 +574,11 @@ std::vector&lt;Shape *&gt; complexScene = {
   // Variables to modify the process or the images
   EMITTER_SAMPLING = true;
   int w = 256, h = 256;
-  int SNAPSHOT_INTERVAL = 25;
-  unsigned int SAMPLES = 100;
-  bool FOCUS_EFFECT = true;
-  double FOCAL_LENGTH = 20;
-  double APERTURE_FACTOR = 0.5; // ratio of original/new aperture (&gt;1: smaller view angle, &lt;1: larger view angle)
+  int SNAPSHOT_INTERVAL = 10;
+  unsigned int SAMPLES = 50;
+  bool FOCUS_EFFECT = false;
+  double FOCAL_LENGTH = 35;
+  double APERTURE_FACTOR = 1.0; // ratio of original/new aperture (&gt;1: smaller view angle, &lt;1: larger view angle)
   // Initialize the image
   Image img(w, h);
   /////////////////////////
