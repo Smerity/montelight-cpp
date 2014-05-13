@@ -87,13 +87,8 @@
 <p>
 The annotated code overview aims to give an IPython Notebook style introduction to the C++ codebase for the project.
 As there is no IPython Notebook equivalent for C++, none of the code is directly runnable, but having it mixed with full commentary can help in providing a fuller understanding of the codebase.
-We aim to introduce the primary components of the program without being limited to showing them in the same order that they appear in the C++ code.
 In unimportant places, source code will be elided for the sake of succinctness.
 In important sections, additional explanation beyond what the code itself provides may be used.
-
-<ul>
-  <li><i>Code may not appear in the same order as the full C++ file.</i> If it makes more sense to introduce something in a different order, that is what we do.
-</ul>
 </p>
 
 <h3>Boilerplate (elided)</h3>
@@ -744,6 +739,12 @@ This is primarily as the code to perform sampling is fast enough that multiple s
 <h2>Variance reduction using a tent filter</h2>
 
 <p>
+To ensure we do not have any hard edges, referred to as aliased edges, we want to slightly perturb the initial starting position of the ray each time.
+We could use random points pulled from the pixel's bounding box, but it turns out these are likely to result in aliasing.
+Restricting it to pixels from this area is referred to as a box filter.
+</p>
+
+<p>
 Using a tent filter is an example of a <a href="http://en.wikipedia.org/wiki/Quasi-Monte_Carlo_method">quasi-Monte Carlo method</a>.
 In certain problems, we know we would prefer something other than a pseudo-random sequence.
 With better chosen sequences of samples, usually low-discrepancy sequences, quasi-Monte Carlo has a rate of convergence close to $O(\frac{1}{N})$, whereas the rate for the Monte Carlo method is $O(N^{-0.5})$.
@@ -759,6 +760,7 @@ This prevents aliasing in situations such as <a href="http://en.wikipedia.org/wi
 
 <center>
 <img src="img/tent.png" />
+<p><em>The green points are randomly distributed whilst the blue points are distributed according to the tent filter.</em></p>
 </center>
 
 <pre><code class="cpp">        // Jitter pixel randomly in dx and dy according to the tent filter
