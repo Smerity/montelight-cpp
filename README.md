@@ -9,12 +9,12 @@ For a broad overview of the approach employed, refer to our [website](http://sme
 For a guided exploration of the code, similar in style to an IPython Notebook, refer to our [annotated code overview](http://smerity.com/montelight-cpp/code_overview.html).
 
 As this library doesn't use any external libraries, compilation is relatively simple.
-To compile, use either `g++` or `clang++`:
+To compile, use any C++11 compatible compiler such as `g++` or `clang++`:
 
-    g++ -fopenmp -O3 -std=c++0x montelight.cc -o montelight
-    clang++ -fopenmp -O3 -std=c++0x montelight.cc -o montelight
+    g++ -O3 -std=c++0x montelight.cc -o montelight
+    clang++ -O3 -std=c++0x montelight.cc -o montelight
 
-To run the program, simply execute it on the command line:
+To run the program, simply execute it on the command line via:
     ./montelight
 
 If you provide a `temp` folder, a number of in progress renders will be saved.
