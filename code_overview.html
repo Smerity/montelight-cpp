@@ -244,8 +244,12 @@ For use in our variance reduction attempts, we also keep track of the current va
 We found in our experiments that keeping track of the raw samples leads to excessive overhead however, usually leading to worse results than just taking more samples in the time that would be have been spent performing bookkeeping.
 </p>
 
-<p class="text-danger">
-$getSurroundingAverage$
+<p>
+The function $getSurroundingAverage$, whilst it isn't used in this code (our experiments showed it to be of little benefit for a large amount of extra computational work), is used for variance reduction through rejection sampling.
+The intuition was that most pixels are similar to their neighbours.
+Aliasing occurs when pixels change values sharply.
+Thus, pixels which are quite different to their neighbours should likely receive more samples.
+This is similar to attempting to minimize between chain variance in traditional Markov Chain Monte Carlo.
 </p>
 
 <h4>Exporting the image</h4>
@@ -492,6 +496,16 @@ std::vector&lt;Shape *&gt; complexScene = {
 };
 //</code></pre>
 
+<h3>Tracer</h3>
+
+<p>
+The Tracer class is responsible for handling all ray and light path calculations in the scene.
+This is broken up into the $getIntersection$ and $getRadiance$ function.
+</p>
+<p>
+The $getIntersection$ function takes a ray and returns the distance to the first object the ray hits, or NULL if no object is hit.
+</p>
+
 <pre><code class="cpp">struct Tracer {
   std::vector&lt;Shape *&gt; scene;
   //
@@ -507,8 +521,21 @@ std::vector&lt;Shape *&gt; complexScene = {
       }
     }
     return std::make_pair(hitObj, closest);
-  }
-  Vector getRadiance(const Ray &amp;r, int depth) {
+  }</code></pre>
+
+<p>
+The core of the raytracer is the $getRadiance$ function, which returns a sample of the amount of light coming in from a set direction when given a ray.
+This is where the logic for BRDF sampling, explicit light sampling, and Russian roulette path termination occur.
+</p>
+<p>
+The rejection sampling for Russian roulette path termination occurs when we test <code>U > hitObj->color.max()</code>.
+We sample a random number $U \in [0, 1]$ and take the maximum color component of the object, where the color components are confined to $[0, 1]$.
+If the object is dark and absorbs the majority of light that reaches it, the probability for path termination is high.
+Conversely, if the object reflects all of any of the color components, it has a zero probability of terminating the path at that point.
+If the path is terminated, we return a zero light contribution (as Vector() defaults to all zeroes, or black).
+</p>
+
+<pre><code class="cpp">  Vector getRadiance(const Ray &amp;r, int depth) {
     // Work out what (if anything) was hit
     auto result = getIntersection(r);
     Shape *hitObj = result.first;
@@ -522,8 +549,30 @@ std::vector&lt;Shape *&gt; complexScene = {
     // Orient the normal according to how the ray struck the object
     if (norm.dot(r.direction) &gt; 0) {
       norm = norm * -1;
-    }
-    // Work out the contribution from directly sampling the emitters
+    }</code></pre>
+
+<p>
+For explicit light sampling, we first check if it is enabled.
+If it is, we sample a random point from each light in the scene and check if it illuminates the current hit surface.
+To work out the direction to the light, we use the trick described earlier, <code>(lightPos - hitPos).norm()</code>.
+With that, we can describe a ray from the hit surface towards the light source via <code>Ray(hitPos, lightDirection)</code>.
+We then check if the given ray immediately hits the light source.
+If it hits any other object, we know the object is in shadow, and receives no direct light contribution from that point.
+This is well visualized by the diagram below.
+The rays that hit the top of the sphere are illuminated by the light source as there is nothing between it and the light.
+The ray that hits underneath the sphere first hits the sphere when travelling towards the light source, so we know it is in shadow.
+</p>
+
+<center><img src="img/raytracing_diagram.png" height="250px"></center>
+
+<p>
+If the hit surface is illuminated by the random point on the light, we calculate the angle towards it using the other vector trick mentioned earlier, <code>lightDirection.dot(norm)</code>.
+This calculates the angle between the normal of the hit surface and the light source, $\cos{\theta}$.
+Then we employ a simple BRDF to approximate how much of the light would be sent from the light source to this specific hit surface.
+For more details about the BRDF, refer to <a href="http://www.cs.princeton.edu/courses/archive/fall06/cos526/tmp/wynn.pdf">An Introduction to BRDF-Based Lighting</a> or our paper.
+</p>
+
+<pre><code class="cpp">    // Work out the contribution from directly sampling the emitters
     Vector lightSampling;
     if (EMITTER_SAMPLING) {
       for (Shape *light : scene) {
@@ -546,8 +595,19 @@ std::vector&lt;Shape *&gt; complexScene = {
           }
         }
       }
-    }
-    // Work out contribution from reflected light
+    }</code></pre>
+
+<p>
+Finally, we work out the amount of light that would be reflected onto this location from another surface in the scene.
+To do this, we must select a random direction to travel.
+This random direction is selected again according to the material's BRDF in order to minimize wasted rays.
+</p>
+
+<center>
+  <img src="img/brdf_montage.png">
+</center>
+
+<pre><code class="cpp">    // Work out contribution from reflected light
     // Diffuse reflection condition:
     // Create orthogonal coordinate system defined by (x=u, y=v, z=norm)
     double angle = 2 * M_PI * drand48();
@@ -561,8 +621,16 @@ std::vector&lt;Shape *&gt; complexScene = {
     u = u.cross(norm).norm();
     Vector v = norm.cross(u);
     // Direction of reflection
-    Vector d = (u * cos(angle) * dist_cen + v * sin(angle) * dist_cen + norm * sqrt(1 - dist_cen * dist_cen)).norm();
+    Vector d = (u * cos(angle) * dist_cen + v * sin(angle) * dist_cen + norm * sqrt(1 - dist_cen * dist_cen)).norm();</code></pre>
 
+<p>
+Finally, we launch the ray in the given direction and record how much light is sent back.
+Depending on whether we are using explicit light sampling or not, we have two different paths.
+Emitter sampling cannot consider light emitted from the objects it hits due to double counting.
+For full details, refer to our paper.
+</p>
+
+<pre><code class="cpp">
     // Recurse
     Vector reflected = getRadiance(Ray(hitPos, d), depth + 1);
     //
@@ -571,8 +639,7 @@ std::vector&lt;Shape *&gt; complexScene = {
     }
     return hitObj-&gt;color * lightSampling + hitObj-&gt;color * reflected;
   }
-};
-</code></pre>
+};</code></pre>
 
 <h2>Setting up the camera</h2>
 
@@ -632,6 +699,13 @@ rays that emerge from the camera subtend the same area in the image plane, regar
   // Cross product gets the vector perpendicular to cx and the &quot;gaze&quot; direction
   Vector cy = (cx.cross(camera.direction)).norm() * aperture;
 </code></pre>
+
+<p>
+We are now ready to take samples of our scene.
+In this situation, we want to take $n$ samples, which is our outer loop.
+Every set interval, we also save an in-progress snapshot in the <code>temp</code> directory so that we can check convergence.
+</p>
+
 <pre><code class="cpp">  /////////////////////////
   // Take a set number of samples per pixel
   for (int sample = 0; sample &lt; SAMPLES; ++sample) {
@@ -645,6 +719,17 @@ rays that emerge from the camera subtend the same area in the image plane, regar
     for (int y = 0; y &lt; h; ++y) {
       for (int x = 0; x &lt; w; ++x) {
 </code></pre>
+
+<h4>Variance reduction through adaptive sampling</h4>
+
+<p>
+As mentioned earlier, we performed a number of experiments using various adaptive sampling techniques.
+Unfortunately none of them worked particularly well.
+We left one of the rejection based methods commented out here.
+The overhead of estimating the variance and performing rejection sampling repeatedly for each pixel in the scene killed any computational benefits that we hoped to see.
+This is primarily as the code to perform sampling is fast enough that multiple samples could be taken in the time it would take to perform rejection sampling.
+</p>
+
 <pre><code class="cpp">        /*
         Vector target = img.getPixel(x, y);
         double A = (target - img.getSurroundingAverage(x, y, sample % 2)).abs().max() / (100 / 255.0);
@@ -655,7 +740,7 @@ rays that emerge from the camera subtend the same area in the image plane, regar
         */
 </code></pre>
 
-<h2>Tent filter</h2>
+<h2>Variance reduction using a tent filter</h2>
 
 <p>
 Using a tent filter is an example of a <a href="http://en.wikipedia.org/wiki/Quasi-Monte_Carlo_method">quasi-Monte Carlo method</a>.
@@ -675,8 +760,7 @@ This prevents aliasing in situations such as <a href="http://en.wikipedia.org/wi
 <img src="img/tent.png" />
 </center>
 
-<pre><code class="cpp">
-        // Jitter pixel randomly in dx and dy according to the tent filter
+<pre><code class="cpp">        // Jitter pixel randomly in dx and dy according to the tent filter
         double Ux = 2 * drand48();
         double Uy = 2 * drand48();
         double dx;
