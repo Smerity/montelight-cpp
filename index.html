@@ -125,7 +125,7 @@ To achieve a noise free image requires a large number of samples, especially if 
 <h2>Importance sampling using BRDF sampling</h2>
 
 <p>
-Some materials only allow light in very specific directions.
+Some materials only reflect light in very specific directions.
 This is commonly related to the roughness of the material.
 A mirror, such as the one on the left, needs far less samples than the diffuse surface on the right.
 </p>
@@ -217,11 +217,11 @@ extreme bias can still be visible in more complex scenes even with max depths of
 <h2>Variance reduction</h2>
 
 <p>
-Monte Carlo raytracers traditionally work by taking a specified number of samples for every pixel in the image. 
+Monte Carlo raytracers traditionally work by taking a specified number of samples for every pixel in the image.
 Though this is guaranteed to produce a desirable result for large enough $n$, it can lead to substantial computational effort being spent on pixels that do not require any additional samples.
 </p>
 <p>
-Motivated by this understanding, we implemented adaptive sampling, which would perform samples on pixels according to rejection sampling of the perceived variance.
+Motivated by this understanding, we implemented adaptive sampling, which would perform sampling over the pixels according to rejection sampling of the perceived variance.
 The perceived variance is defined either by the variance of the individual pixel or the expected variance when compared to neighbouring pixels.
 Unfortunately, we found that the large amount of overhead required to perform these calculations is less efficient than simply performing more samples.
 Whilst the results produced were of comparable quality, the overhead necessary to store all the samples stored was too large to be offset by any of our computational gains.
