@@ -563,6 +563,12 @@ std::vector&lt;Shape *&gt; complexScene = {
 };
 </code></pre>
 
+<h2>Setting up the camera</h2>
+
+<p>
+
+</p>
+
 <pre><code class="cpp">int main(int argc, const char *argv[]) {
   /////////////////////////
   // Variables to modify the process or the images
@@ -581,12 +587,24 @@ std::vector&lt;Shape *&gt; complexScene = {
   Tracer tracer = Tracer(scene);
 </code></pre>
 
+<p>
+To change the field of view, we divide he aperture size by <em>APERTURE_FACTOR</em>, so a value > 1 results in a shallower field of view, and a
+value < 1 results in a wider field of view. Depending on the field of view, we have to move the camera either closer or farther away from the scene to
+display the desired image. For example, when the field of view becomes too wide, we begin to see the black background around the edges of the
+Cornell box. Conversely, if the field of view is too narrow, we only see the center portion of our image (essentially zoomed in). To fix, this
+we reposition the camera by recalculating $L$, the distance from the camera to the image plane. Essentially what this does is ensure that the
+rays that emerge from the camera subtend the same area in the image plane, regardless of their angle (dictated by aperture size).
+</p>
+
 <pre><code class="cpp">  /////////////////////////
   // Set up the camera
+  // Get new aperture size
   double aperture = 0.5135 / APERTURE_FACTOR;
   Vector cx = Vector((w * aperture) / h, 0, 0);
   Vector dir_norm = Vector(0, -0.042612, -1).norm();
+  // Original distance from camera to image plane
   double L = 140;
+  // Calculate new L to shift camera appropriately
   double L_new = APERTURE_FACTOR * L;
   double L_diff = L - L_new;
   Vector cam_shift = dir_norm * (L_diff);
@@ -658,6 +676,18 @@ This prevents aliasing in situations such as <a href="http://en.wikipedia.org/wi
           dy = 1 - sqrt(2 - Uy);
         }
 </code></pre>
+
+<h3>Focusing</h3>
+
+<p>
+The boolean <em>FOCUS_EFFECT</em> incorporates a focusing effect. This essentially changes the directions of all of the rays
+from each pixel so that they converge at a distance <em>FOCAL_LENGTH</em> from the image plane. The direction for each ray in each
+pixel is different, as the pixels are jittered randomly according to the tent filter described above. First, we calculate the focal
+point $fp$ from each pixel by extending the ray from the camera past the image plane out to the focal length. Then we find the point
+on the pixel <em>point</em> that the ray passes through, according to our tent filter. By subtracting the position of this point from
+the focal point, we have the new direction vector $d$ from the image plane into the image. 
+</p>
+
 <pre><code class="cpp">        // Calculate the direction of the camera ray
         Vector d = (cx * (((x+dx) / float(w)) - 0.5)) + (cy * (((y+dy) / float(h)) - 0.5)) + camera.direction;
         Ray ray = Ray(camera.origin + d * 140, d.norm());
