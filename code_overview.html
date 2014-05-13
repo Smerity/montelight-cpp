@@ -123,17 +123,29 @@ bool EMITTER_SAMPLING = true;</code></pre>
 <h3>Vectors</h3>
 
 <p>
-In our task, all interactions happen in a three dimensional space: points or colours.
+In our task, all interactions happen in a three dimensional space: points or colors.
 The most convenient representation for this is a three dimensional Vector.
-For succinctness, and to prevent duplication of equivalent functionality, the Vector class is used for both points in space as well as the colours.
+For succinctness, and to prevent duplication of equivalent functionality, the Vector class is used for both points in space as well as the colors.
+Whilst many of the operations we perform on Vectors are obvious (min, max, addition, subtraction, etc) there are some that warrant special attention.
 </p>
 <h4>Vectors for points</h4>
-<p class="text-danger">
-dot, norm
+<p>
+When dealing with vectors as points in space, we perform two primary operations: dot product and norm.
+The dot product of two vectors $X$ and $Y$ is $X \cdot Y = |X| |Y| \cos{\theta}$, represented in the code as <code>X.dot(Y)</code>.
+When we normalize the vectors $X$ and $Y$ beforehand such that $|X| = |Y| = 1$, that means the dot product is equal to the angle between the vectors.
+This is used to work out angle of incidence and reflection, primarily for calculating the Bidirectional Reflectance Distribution Function (BRDF).
 </p>
-<h4>Vectors for colours</h4>
-<p class="text-danger">
-Clamping
+<p>
+The other common operation is working out the direction of travel if we are at point $X$ and wish to reach point $Y$.
+An example might be if we want to work out what direction a ray should be shot from a surface point $P$ in order to reach a point on a light source $L$ assuming the surface point is not in shadow.
+Thanks to the Vector class, this can be intuitively written as <code>(L - P).norm()</code>.
+</p>
+<h4>Vectors for colors</h4>
+<p>
+When it comes to light or pixels, we represent colour as a Vector of [<span style="color:#B33">red</span>|<span style="color:#3B3">green</span>|<span style="color:#33B">blue</span>].
+This Vector is limited to the range $[0, 1]$ such that we can scale it arbitrarily later.
+As some light sources can exceed our perceived vision (i.e. greater than 1) we <code>clamp</code> the values to the correct range.
+This is accurate to our physical models (both eyes and cameras resort to white when oversaturated with photons) and also helps prevent anti-aliasing.
 </p>
 
 <pre><code class="cpp">struct Vector {
@@ -249,7 +261,7 @@ The details of this function is in the $save$ function.
 <p>
 The $toInt$ function is used to convert the Vector of [<span style="color:#B33">red</span>|<span style="color:#3B3">green</span>|<span style="color:#33B">blue</span>] into a final set of pixel values.
 The $toInt$ function performs gamma correction ($x ^ \frac{1}{2.2}$) and then scales the float, which is between 0 and 1, to be from 0 to 255.
-This allows us to represent the pixel in 24 bit colour (8 bits per pixel component) for the final image.
+This allows us to represent the pixel in 24 bit color (8 bits per pixel component) for the final image.
 </p>
 
 <pre><code class="cpp">struct Image {
@@ -331,6 +343,15 @@ This allows us to represent the pixel in 24 bit colour (8 bits per pixel compone
   }
 };</code></pre>
 
+<h3>Shapes</h3>
+
+<p>
+In order to define our scene, we need to state where objects are located in space and their properties.
+Whilst we only define Spheres in our renderer, we wanted to allow for arbitrary surfaces such as triangles, planes, and any surface that can be mathematically defined.
+To implement a Shape, all that is required is a way of performing intersection testing, a way to randomly select a point on the surface for use in lighting, and a way to get the normal of any ray that strikes the surface.
+</p>
+
+
 <pre><code class="cpp">struct Shape {
   Vector color, emit;
   //
@@ -338,9 +359,37 @@ This allows us to represent the pixel in 24 bit colour (8 bits per pixel compone
   virtual double intersects(const Ray &amp;r) const { return 0; }
   virtual Vector randomPoint() const { return Vector(); }
   virtual Vector getNormal(const Vector &amp;p) const { return Vector(); }
-};
+};</code></pre>
 
-struct Sphere : Shape {
+<h3>Spheres</h3>
+
+<p>
+Spheres are the shape we use to define our scenes and test our renderer.
+Performing intersection tests for an arbitrary ray is a trivial result of applying linear algebra.
+For more details, refer to any well known resource on rendering that covers <a href="http://wiki.cgsociety.org/index.php/Ray_Sphere_Intersection">ray-sphere intersections</a>.
+In brief, the calculation uses the quadratic formula to find zero, one or two roots.
+Zero roots means the ray does not intersect with the sphere.
+One root means the ray hits the sphere at a tangent.
+Two roots means that the ray passes through the sphere, with the smaller of the two solutions being the side closest to the origin of the ray.
+</p>
+
+<p>
+<center>
+  <img src="img/uneven_sphere.png" />
+  <p><em>On the left are random points generated using spherical co-ordinates. <br />
+    On the right are random points generated using computationally intensive Poisson-disc sampling.<br />
+    Image from <a href="https://www.jasondavies.com/maps/random-points/">Random Points on a Sphere by Jason Davies</a>.</em><p>
+</center>
+</p>
+
+<p>
+For calculating a random point on the sphere, we use spherical co-ordinates.
+Whilst this does result in <a href="https://www.jasondavies.com/maps/random-points/">an un-even distribution</a>, it is not a cause of any strong rendering artifacts or issues.
+Whilst we would have preferred better methods to generate an even distribution of points across the sphere, such as <a href="http://en.wikipedia.org/wiki/Supersampling#Poisson_disc">Poisson-disc sampling</a>, they are generally regarded as too slow to compute for real time or computationally intensive applications.
+Recently Dunbar et al. (2006) proposed using <a href="http://www.cs.virginia.edu/~gfx/pubs/antimony/">a set of spatial data structures for fast Poisson disk sample generation</a> but this would have been far more complexity than we would want to implement for no real benefit.
+</p>
+
+<pre><code class="cpp">struct Sphere : Shape {
   Vector center;
   double radius;
   //
